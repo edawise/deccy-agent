@@ -76,7 +76,8 @@ def main() -> int:
                 if target_pos < node_pos:
                     problems.append(
                         f"{node} -> {target} ({field}): prerequisite is newer in "
-                        f"history; restack with jj rebase -s {target} -B {node}"
+                        f"history; move just it: jj rebase -r {target} -B {node} "
+                        f"(never -s; see decision-placement.md)"
                     )
 
     if problems:

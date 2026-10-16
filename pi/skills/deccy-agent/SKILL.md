@@ -11,8 +11,8 @@ dependency edge should be evaluation-covered.
 
 Graph work goes through the `deccy` CLI, never hand-rolled change surgery. Read
 `references/deccy-workflow.md` before touching any node. Read `references/decision-placement.md`
-before deciding *where* a change goes. Read `references/evaluation-conventions.md` when adding or
-covering `depends_on` edges.
+before deciding *where* a change goes. Read `references/evaluations.md` when adding or covering
+`depends_on` edges (per-cell form guidance: `references/eval-cells.md`).
 
 ## 1. Discover the project first
 
@@ -77,33 +77,29 @@ jq -e 'select(.kind=="decision") | has("depends_on")' nodes/*.json >/dev/null
 jq -e 'select(.kind=="evaluation") | has("evaluates")' nodes/*.json >/dev/null
 ```
 
-`deccy validate` prints one `<check> <id> <reason>` line per failure and nothing when clean. It
-covers validity (against the embedded schema), resolution (every edge target resolves), and
-coverage (every decision edge to another decision has a covering evaluation). It does **not** check
-topology or custody — those are the two read-only scripts.
+`deccy validate` covers validity, resolution and I4 coverage only; it does **not** check topology
+or custody — those are the two read-only scripts (failure line format: `references/deccy-workflow.md`).
 
 ## 4. Where a change goes (placement)
 
-Before editing, identify the decision(s) at play — including level: a request such as "add rate
-limiting" is a higher-order decision that lower-level decisions elaborate. Then:
+Before editing, identify the decision(s) at play, including level: a higher-order decision is
+elaborated by lower-level ones, each its own node (full procedure and worked examples:
+`references/decision-placement.md`). Then:
 
-- The work changes what an existing node decided → **edit that node** (record flow,
-  `references/deccy-workflow.md`). Do not add a near-duplicate node.
-- The work is a new decision → **new node** via `deccy new -m <summary> --on <dep-id> --on
-  <dep-id>`, positioned after its dependencies, with `depends_on` naming them. **`--on` takes one id
-  per flag** — repeat it for several dependencies. Never fold a new decision into an existing
-  node's change, even when the code lives in the same files.
-- The work touches files listed in another node's `ref` → you are changing that node's decision.
-  Either the touch serves that decision (record it into the node) or it serves a different purpose
-  (it is a new decision — new node). When unsure, new node.
-- A check (test, criterion, measurement) → evaluation node, wired per I4.
-- One change carrying two decisions → split it.
+- Changes what an existing node decided → **edit that node** (record flow,
+  `references/deccy-workflow.md`); never add a near-duplicate node.
+- A new decision → **new node** (`deccy new`, positioned after its dependencies) with `depends_on`
+  naming them; never fold it into an existing node's change, even when the code lives in the same
+  files.
+- Touches files listed in another node's `ref` → you are changing that node's decision: record the
+  touch into it if it serves that decision, otherwise it is a new node. When unsure, new node.
+- A check (test, criterion, measurement) → evaluation node, wired per I4
+  (`references/evaluations.md`).
+- One change carrying two decisions → split it (`references/decision-placement.md`).
 
-Smells: rationale text in node X arguing a different decision than X records (a decision sitting
-in the wrong node — move it out and link it); code changed with no node created or edited (the
-choice is undocumented); a new `depends_on` edge with no covering evaluation (add one, per I4); a
-prerequisite positioned after its dependent in history (restack with `jj rebase` — topological
-order, `references/decision-placement.md`).
+Smells and their fixes (`references/decision-placement.md`): a rationale in node X arguing a
+different decision than X records; code changed with no node created or edited; a new `depends_on`
+edge with no covering evaluation; a prerequisite positioned after its dependent in history.
 
 ## 5. Worked example
 
@@ -141,18 +137,9 @@ decision, so it is placed into `C`'s change (`deccy record src/ui/toolbar.tsx --
 their own nodes via `deccy new --on B` (or `--on C`) as they arise, rather than bloating the
 higher-order nodes.
 
-## 6. deccy playbook (summary — details in references/deccy-workflow.md)
+## 6. deccy playbook
 
-- New node: `deccy new -m "<summary>" --on <dep-id> --on <dep-id>` (one id per `--on` flag) prints
-  the new id, opens its change as the working copy, and writes a `nodes/<id>.json` skeleton; fill it
-  in place.
-- Edit an existing node: edit its files in the working copy, then `deccy record <path>... --to
-  <id>` (refuses a path not changed in the working copy or not owned by the node).
-- Isolate an edit with a buffer: `jj new <id>` → edit → `deccy record <path>... --to <id>` (the
-  CLI squashes the buffer into the node).
-- Remove a node: `deccy remove <id>` — only when nothing depends on it; it takes the node's own
-  gates with it.
-- Read: `deccy log`, `deccy show <id>`. Check: `deccy validate`.
-- Recover: `deccy undo` / `deccy redo`.
-- A node's description is set at `new`; changing it later is the one raw-jj exception
-  (`jj describe -m "<summary>" <id>`).
+The exact CLI workflows — `new`, `record`, buffer edits, `remove`, read/check, `undo`/`redo`, and
+the one raw-jj exception (`jj describe` for a change summary) — live in
+`references/deccy-workflow.md`. Read that file before touching any node; this skill does not
+duplicate its command details.

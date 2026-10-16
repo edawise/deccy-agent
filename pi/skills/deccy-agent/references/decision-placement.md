@@ -35,7 +35,7 @@ papering over it.
    decision.** Either the touch serves that decision (squash it into the node) or it serves a
    different purpose (new decision, new node). When unsure, new node.
 4. **A check (test, criterion, measurement) → evaluation node**, wired per I4
-   (`evaluation-conventions.md`).
+   (`evaluations.md`).
 
 ## Splitting a bundled node
 
@@ -87,14 +87,17 @@ A report naming a prerequisite newer than its dependent is fixed by moving that 
   dependency that sits below those dependents: the node then lands below them too and no rebase is
   needed. (Worked case: a rule that a node near the top of the stack must depend on — naming a
   dependency far below it lands the rule just below that dependency and below every dependent.)
-- **Otherwise move the one node**, with the checker as the judge:
+- **Otherwise move the one node**, with the checker as the judge. `-r` moves the prerequisite change
+  alone; the usual anchor splices it in immediately below its dependent:
 
 ```sh
-jj rebase -r <prereq> -A <the change it should follow>   # moves that node
-scripts/check-topology.py                                # the oracle
+jj rebase -r <prereq> -B <dependent>                      # moves that node only
+# or, when something else must remain below the moved change:
+jj rebase -r <prereq> -A <the change it should follow>    # moves that node only
+scripts/check-topology.py                                 # the oracle
 ```
 
-Do **not** use `jj rebase -s <prereq> -B <dependent>`. In a linear stack `-s` takes the
+Do **not** use `-s` here (`jj rebase -s <prereq> -B <dependent>`). In a linear stack `-s` takes the
 prerequisite's whole subtree — every change newer than it — and drags it along, reordering those
 changes against the dependent and inverting edges you were not looking at. A revset block
 (`jj rebase -r '<a>::<b>' -A <dest>`) is no better: when the block already sits above the

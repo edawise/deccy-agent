@@ -118,8 +118,8 @@ scripts/check-ref-custody.py # no change touches another node's content
 
 Both are diagnostics: they read `jj` history and report. The dependency story the graph records
 lives in its edges, and `deccy new --on` positions new nodes correctly by construction. If
-`check-topology.py` reports an inversion, fix it with `jj rebase -s <prereq> -B <dependent>` and
-re-check.
+`check-topology.py` reports an inversion, move that one prerequisite with `jj rebase -r` (the
+topological-order procedure in `decision-placement.md`) and re-check.
 
 ## Recover
 
@@ -139,5 +139,6 @@ orientation you may still read `jj` directly (read-only): `jj log`, `jj st`, `jj
 - A new node is placed after its dependencies by `deccy new --on`; keep the `--on` set on one line
   (a forked set refuses).
 - Keep the stack topologically sorted: after adding or rewiring any `depends_on` edge, check that
-  every prerequisite precedes its dependent, and restack with `jj rebase -s <prereq> -B
-  <dependent>` if it does not (change ids survive the move, so edges are untouched).
+  every prerequisite precedes its dependent. Fix an inversion by moving the one prerequisite with
+  `jj rebase -r` — never `-s`, which drags its whole subtree (procedure: topological order in
+  `decision-placement.md`). Change ids survive the move, so edges are untouched.
