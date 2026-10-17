@@ -1,0 +1,9 @@
+{
+  "kind": "decision",
+  "depends_on": ["zzzzzzzz"],
+  "content": {
+    "type": "text",
+    "ref": ["src/ui/toolbar.tsx"],
+    "rationale": "The toolbar is the mount point for library actions; keeping them there keeps the document surface clean."
+  }
+}

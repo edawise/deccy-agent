@@ -1,0 +1,10 @@
+{
+  "kind": "evaluation",
+  "evaluates": ["bfts5x03"],
+  "depends_on": ["adocsw01"],
+  "content": {
+    "type": "test",
+    "ref": ["tests/search-index.spec.ts"],
+    "rationale": "Index returns ranked results and stays current across file edits and deletes."
+  }
+}

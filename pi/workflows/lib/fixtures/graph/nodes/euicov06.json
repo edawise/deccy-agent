@@ -1,0 +1,10 @@
+{
+  "kind": "evaluation",
+  "evaluates": ["csrchb04"],
+  "depends_on": ["bfts5x03", "htoolb02"],
+  "content": {
+    "type": "test",
+    "ref": ["tests/search-ui.spec.ts"],
+    "rationale": "Results reflect the index and the box mounts cleanly in the toolbar layout."
+  }
+}

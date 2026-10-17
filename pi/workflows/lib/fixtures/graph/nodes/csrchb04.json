@@ -1,0 +1,9 @@
+{
+  "kind": "decision",
+  "depends_on": ["bfts5x03", "htoolb02"],
+  "content": {
+    "type": "text",
+    "ref": ["src/ui/search-box.tsx", "src/ui/snippets.ts"],
+    "rationale": "Debounce keeps typing smooth against a large index; eight highlighted results fit the panel without scrolling."
+  }
+}

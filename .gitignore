@@ -1,0 +1,13 @@
+# npm dependencies (keep package-lock.json tracked)
+pi/node_modules/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# jj metadata (colocated repo)
+.jj/
+
+# OS / editor noise
+.DS_Store
+*.log

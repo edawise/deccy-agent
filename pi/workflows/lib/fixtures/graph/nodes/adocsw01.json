@@ -1,0 +1,10 @@
+{
+  "kind": "decision",
+  "depends_on": ["zzzzzzzz"],
+  "content": {
+    "type": "text",
+    "ref": "inline",
+    "content": "Documents are Markdown files on disk; the app watches the library directory and reloads on change.",
+    "rationale": "The library format and reload behavior are the substrate every search and UI decision builds on."
+  }
+}

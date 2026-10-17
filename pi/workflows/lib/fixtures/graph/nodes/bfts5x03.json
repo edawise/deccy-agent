@@ -1,0 +1,9 @@
+{
+  "kind": "decision",
+  "depends_on": ["adocsw01"],
+  "content": {
+    "type": "text",
+    "ref": ["src/search/index.ts", "src/search/watch-hook.ts"],
+    "rationale": "FTS5 gives ranked results and incremental updates; re-scanning the library per keystroke won't scale past a few hundred files."
+  }
+}

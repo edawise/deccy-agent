@@ -34,6 +34,30 @@ REPO_URL=<fork-url> ./install.sh     # install from a fork instead
 
 Re-run to update. To uninstall, `./install.sh --uninstall`.
 
+## pi workflows (deccy-edit)
+
+The `pi/` tree adds the pi SDK workflows (planner + executor + direct editor),
+the interactive `deccy-plan` pi skill, and the plan gate. Install them the
+same way:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/edawise/deccy-agent/main/install-pi.sh | sh
+```
+
+That installs `pi/` to `~/.pi/agent/deccy-agent` (runs `npm install` once),
+symlinks the skills into `~/.pi/agent/skills/` (pi discovers them), and adds
+`deccy-edit` commands to `~/.local/bin`.
+
+```sh
+deccy-edit -i  
+deccy-edit "<request>" --graph /path/to/deccy-repo   # simple edits / node adds   
+```
+
+Options mirror `install.sh`: `--project <dir>` (skills into `<dir>/.pi/skills`),
+`--ref`, `--uninstall`, `REPO_URL`/`DEST_APP`/`DEST_SKILLS`/`DEST_BIN` env
+overrides. Needs Node ≥ 22, and `deccy`/`jj`/`python3` on PATH for real runs.
+User docs: `pi/README.md`.
+
 If `edawise/deccy-agent` is not the real repo location, replace it with the actual URL above (and
 in `install.sh`'s `REPO_URL` default) before sharing.
 
