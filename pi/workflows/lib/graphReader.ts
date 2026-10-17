@@ -46,7 +46,7 @@ export interface LoadResult {
 }
 
 /** Read every nodes/*.json document. Broken JSON is reported, not fatal here —
- * callers decide (the planner notes the deviation; the executor refuses). */
+ * callers decide (deccy-edit refuses the run by name). */
 export function loadNodeDocs(nodesDir: string): LoadResult {
   const entries: GraphEntry[] = [];
   const problems: string[] = [];

@@ -1,5 +1,5 @@
-// hostValidators — the 0 LLM working-copy checks shared by deccy-executor and
-// deccy-edit: `deccy validate` plus the two read-only checker scripts from the
+// hostValidators — the 0 LLM working-copy checks deccy-edit runs after every
+// turn: `deccy validate` plus the two read-only checker scripts from the
 // deccy-agent skill. `deccy validate` exits 0 even when dirty, so the verdict
 // is line-based: any reported line is a problem.
 

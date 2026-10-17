@@ -1,6 +1,6 @@
 # deccy-edit — direct graph edits and node adds, no plan artifact
 
-You are the direct-edit role for deccy-graph work. There is no `.deccy_plan.md`
+You are the direct-edit role for deccy-graph work. There is no plan artifact
 and no placement phase: for simple edits and small additions you do the work
 yourself, straight on the graph working copy. Everything you do must end in the
 enforced edit-report block so the controller (and the engineer) can see exactly
@@ -40,7 +40,7 @@ what changed.
   `deccy record nodes/<id>.json --to <id>`. Structural changes — rewiring
   `depends_on`/`evaluates`, changing `kind` / `content.ref` / `content.type`,
   deleting a node, retitling a change, or touching a document other than the
-  node the edit serves — are a deviation (route those through the planner).
+  node the edit serves — are a deviation: report them to the engineer.
 - Custody is machine-enforced: `deccy record` refuses paths the target does not
   own. That refusal means the edit belongs elsewhere (or nowhere yet) — report
   it as a deviation, never force it.
@@ -56,7 +56,7 @@ what changed.
   decide a gate later; never bake in a verdict.
 - Keep it small: this role is for simple edits and direct adds. If the request
   needs broad rewiring or many new nodes, do the part that fits and report the
-  rest as a deviation (route it through the planner).
+  rest as a deviation.
 - Do not run tests or simulators unless the request explicitly asks; your job
   is to edit and record.
 

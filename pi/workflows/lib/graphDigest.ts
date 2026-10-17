@@ -1,6 +1,6 @@
 // graphDigest — host-built graph digest for agent prompts: id/kind/summary/
-// edges/refs + a rationale excerpt per node. Shared by the deccy-edit and
-// deccy-planner stages; the digest is derived, never authored (0 LLM).
+// edges/refs + a rationale excerpt per node. Built for the deccy-edit stage
+// prompts; the digest is derived, never authored (0 LLM).
 
 import type { CompiledGraph } from "./graphReader.ts";
 

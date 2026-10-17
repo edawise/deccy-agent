@@ -1,5 +1,5 @@
-// stageJson — the fenced-JSON seam shared by every deccy stage runner
-// (planAuthor, content). Adapted from edagent's workflows/lib/stageJson.ts
+// stageJson — the fenced-JSON seam shared by the deccy stage runners.
+// Adapted from edagent's workflows/lib/stageJson.ts
 // (MIT, https://github.com/edawise/edagent) plus the rca-planner controller's
 // local JSON helpers (jsonFenceSafe / stripRawWsInStrings).
 //
@@ -75,39 +75,11 @@ export function parseAllFencedJson(text: string): { values: unknown[]; errors: s
   return { values, errors };
 }
 
-/** Standard REWORK-round preamble: the engineer's prompt text verbatim plus the
- * preserve-don't-regenerate directive. Prepend to a stage's first prompt on
- * --revise rounds with prompt text so rework converges instead of re-rolling. */
-export function reworkPreamble(feedback: string): string {
-  return [
-    "This is a REWORK round. Engineer feedback (verbatim):",
-    "---",
-    feedback,
-    "---",
-    "Before authoring, READ the on-disk .deccy_plan.md (or the graph working copy) first. " +
-      "The on-disk state is authoritative context: PRESERVE the existing structure (localIds, " +
-      "sections, node blocks) wherever the feedback does not require changing it — refine, do not " +
-      "regenerate from scratch. Hand-edited blocks are authoritative and must be preserved.",
-  ].join("\n");
-}
-
-/** Fresh-run directive framing: engineer's --prompt text as creation objectives. */
-export function intentPreamble(prompt: string): string {
-  return [
-    "Engineer objectives for this run (verbatim):",
-    "---",
-    prompt,
-    "---",
-    "Treat the above as creation directives for a fresh run: author the plan from the graph " +
-      "digest per your role method. Do not treat it as a correction to prior output.",
-  ].join("\n");
-}
-
 /**
  * Serialize a value for embedding in a fenced ```json block. JSON.stringify
  * does not escape backticks, so agent text quoting a fenced snippet would
  * emit a ``` sequence inside the block and truncate any later parse of the
- * plan. Escaping each backtick of a triple run as \u0060 keeps the JSON
+ * payload. Escaping each backtick of a triple run as \u0060 keeps the JSON
  * valid and round-trips back to ` under JSON.parse.
  */
 export function jsonFenceSafe(value: unknown): string {

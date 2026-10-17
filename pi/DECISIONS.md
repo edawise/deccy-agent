@@ -1,19 +1,19 @@
 # deccy-agent — decisions
 
-Rules live in code (`workflows/lib/planValidate.ts`,
-`workflows/lib/hostValidators.ts`) and the `README.md` tables; this records only
-the reasoning that isn't obvious from the code.
+Rules live in code (`workflows/lib/hostValidators.ts`) and the `README.md`;
+this records only the reasoning that isn't obvious from the code.
 
 ## Workflow shape
 
-- **deccy-edit**: direct edits / node adds, no plan artifact.
-  Every turn must end in one enforced fenced-JSON edit-report
-  (`summary`/`created`/`edited`/`deviations`), with one corrective retry — the
-  same output seam as the executor.
-- **deccy-planner + deccy-executor** for structural work
-  (rewiring, eval sandwiches, multi-node changes): plan → human gate →
-  deterministic placement → LLM content. If a real structural change never uses
-  them, delete both (keep `lib/planValidate.ts` + `plan-gate.ts`).
+- **deccy-edit**: direct edits / node adds, no
+  plan artifact. Every turn must end in one enforced fenced-JSON edit-report
+  (`summary`/`created`/`edited`/`deviations`), with one corrective retry.
+- **Structural changes** are out of scope: rewiring `depends_on`/`evaluates`,
+  changing `kind` / `content.ref` / `content.type`, deleting or retitling a
+  node, or broad work (many new nodes) — deccy-edit does the part that fits and
+  reports the rest as a deviation; the engineer decides. Multi-node edits are
+  in scope (one node at a time, each `deccy record`d separately) — the line is
+  structural change, not node count.
 
 ## Invariants and caps
 
@@ -22,13 +22,12 @@ the reasoning that isn't obvious from the code.
   change — including node-document edits (that's where `ref: "inline"` content
   lives). Checkers run host-side after every turn.
 - **Validators over trust**: `deccy validate` exits 0 even when dirty — judge by
-  its output, not the exit code. Post-hoc validators cover what the pre-mutation
-  gate catches; `deccy undo`/`jj op restore` back out bad turns.
-- **Caps**: ≤ 12 new nodes per plan; ≤ 2 automatic rework rounds (trivial
-  classes only) — rework must converge, not iterate forever.
+  its output, not the exit code. Validators run host-side after every turn;
+  `deccy undo`/`jj op restore` back out bad turns.
+- **Caps**: ≤ 2 automatic rework rounds (trivial classes only) — rework must
+  converge, not iterate forever.
 - **Enforcement is tools, not prose**: read-only REPL turns (`/ask`, `/plan`)
-  narrow the session to `read` via `setActiveToolsByName`; a prompt asking the
-  model to "please not edit" is not enforcement.
+  narrow the session to `read` via `setActiveToolsByName`.
 
 ## deccy CLI quirks (verified against deccy 0.1.0)
 

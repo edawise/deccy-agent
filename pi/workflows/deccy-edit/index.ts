@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // deccy-edit SDK workflow — direct edits and node adds on a deccy graph, with
-// the same enforced-output seam as deccy-executor but WITHOUT a
-// `.deccy_plan.md`: one agent call applies the directive straight to the
-// working copy (`deccy new` / `deccy record` included), the controller parses
-// the edit-report, runs the host validators, and prints the payload.
+// an enforced-output seam and no plan artifact: one agent call applies the
+// directive straight to the working copy (`deccy new` / `deccy record`
+// included), the controller parses the edit-report, runs the host validators,
+// and prints the payload.
 //
 //   node workflows/deccy-edit/index.ts ["<request>"] [--graph <dir>]
 //        [--interactive|-i] [--model provider/model[:thinking]]
@@ -101,7 +101,7 @@ function usage(): string {
     "",
     "  Advanced: [--model provider/model[:thinking]]  (-i is an alias for --interactive)",
     "",
-    "  Direct edits / node adds on the graph — no .deccy_plan.md. Without a request,",
+    "  Direct edits / node adds on the graph — no plan artifact. Without a request,",
     "  -i opens a REPL (the request, if given, runs as its first turn).",
     "  One-shot runs stream the model's thinking to stderr; --no-thinking silences it.",
   ].join("\n");

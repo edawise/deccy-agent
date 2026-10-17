@@ -3,7 +3,7 @@
 #
 # Installs the pi/ tree (workflows + skills + npm dependency) to a stable
 # location, symlinks the skills into pi's discovery path, and drops
-# `deccy-plan` / `deccy-exec` / `deccy-edit` wrapper commands on your PATH.
+# `deccy-edit` wrapper command on your PATH.
 #
 # Usage:
 #   ./install-pi.sh                        # global install (default)
@@ -42,13 +42,12 @@ else
 fi
 
 SKILL_LINK_1="$SKILLS_DIR/deccy-agent"
-SKILL_LINK_2="$SKILLS_DIR/deccy-plan"
-WRAP_PLAN="$BIN_DIR/deccy-plan"
-WRAP_EXEC="$BIN_DIR/deccy-exec"
 WRAP_EDIT="$BIN_DIR/deccy-edit"
 
 if [ "$UNINSTALL" -eq 1 ]; then
-  rm -f "$SKILL_LINK_1" "$SKILL_LINK_2" "$WRAP_PLAN" "$WRAP_EXEC" "$WRAP_EDIT"
+  rm -f "$SKILL_LINK_1" "$WRAP_EDIT"
+  # leftovers from older installs (deccy-plan skill + planner/executor wrappers)
+  rm -f "$SKILLS_DIR/deccy-plan" "$BIN_DIR/deccy-plan" "$BIN_DIR/deccy-exec"
   [ -n "$PROJECT_DIR" ] || rm -rf "$APP_DIR"
   echo "removed skill links and wrappers$( [ -n "$PROJECT_DIR" ] || echo " and $APP_DIR" )"
   exit 0
@@ -74,39 +73,25 @@ echo "installing npm dependency (one-time)..."
 ( cd "$APP_DIR" && npm install --no-audit --no-fund --silent )
 
 # 2. Skill discovery: pi follows symlinked skill dirs, so link (not copy) —
-#    one source of truth, and plan-gate.ts keeps resolving workflows/lib.
+#    one source of truth.
 mkdir -p "$SKILLS_DIR"
 ln -sfn "$APP_DIR/skills/deccy-agent" "$SKILL_LINK_1"
-ln -sfn "$APP_DIR/skills/deccy-plan" "$SKILL_LINK_2"
 
-# 3. Wrapper commands runnable from any directory.
+# 3. Wrapper command runnable from any directory.
 mkdir -p "$BIN_DIR"
-cat > "$WRAP_PLAN" <<EOF
-#!/bin/sh
-exec node "$APP_DIR/workflows/deccy-planner/index.ts" "\$@"
-EOF
-cat > "$WRAP_EXEC" <<EOF
-#!/bin/sh
-exec node "$APP_DIR/workflows/deccy-executor/index.ts" "\$@"
-EOF
 cat > "$WRAP_EDIT" <<EOF
 #!/bin/sh
 exec node "$APP_DIR/workflows/deccy-edit/index.ts" "\$@"
 EOF
-chmod +x "$WRAP_PLAN" "$WRAP_EXEC" "$WRAP_EDIT"
+chmod +x "$WRAP_EDIT"
 
 echo "installed workflows -> $APP_DIR"
 echo "linked skills      -> $SKILL_LINK_1"
-echo "                   -> $SKILL_LINK_2"
-echo "installed commands -> $WRAP_PLAN"
-echo "                   -> $WRAP_EXEC"
-echo "                   -> $WRAP_EDIT"
+echo "installed commands -> $WRAP_EDIT"
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
-  *) echo "note: add $BIN_DIR to PATH to use the deccy-plan / deccy-exec / deccy-edit commands";;
+  *) echo "note: add $BIN_DIR to PATH to use the deccy-edit command";;
 esac
 echo
-echo "try:  deccy-plan --help"
-echo "      deccy-plan \"<request>\" --graph /path/to/deccy-repo"
-echo "      deccy-exec --plan .deccy_plan.md --graph /path/to/deccy-repo"
+echo "try:  deccy-edit --help"
 echo "      deccy-edit \"<request>\" --graph /path/to/deccy-repo"
