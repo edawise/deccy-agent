@@ -5,8 +5,13 @@
 // ephemeral thinking display for reasoning models.
 
 import readline from "node:readline";
+import { spawn } from "node:child_process";
+import { readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { stdin as defaultInput, stdout as defaultOutput } from "node:process";
 import type { StageSession } from "./stageJson.ts";
+import { BRACKETED_PASTE_OFF, BRACKETED_PASTE_ON, PasteFilter } from "./pasteFilter.ts";
 import { styleFor } from "./ttyStyle.ts";
 
 export interface InteractiveLoopOptions {
@@ -19,6 +24,8 @@ export interface InteractiveLoopOptions {
   inputStream?: NodeJS.ReadableStream;
   outputStream?: NodeJS.WritableStream;
   session?: StageSession;
+  /** Ctrl-G "compose in editor" opener (test seam; default: $VISUAL/$EDITOR/vi). */
+  openEditor?: (initial: string) => Promise<string | null>;
 }
 
 /**
@@ -156,89 +163,244 @@ export function streamThinking(
   };
 }
 
+/** Default Ctrl-G opener: write `initial` to a temp file, run $VISUAL/$EDITOR
+ *  with inherited stdio, return the file's content (empty = cancel). */
+export async function defaultOpenInEditor(
+  initial: string,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<string | null> {
+  const editor = (env.VISUAL || env.EDITOR || "vi").trim();
+  const file = path.join(tmpdir(), `deccy-prompt-${process.pid}-${Date.now()}.md`);
+  await writeFile(file, initial);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      // The temp file is appended (quoted) to the editor command: editors
+      // launched with no file argument just open an empty window/buffer.
+      // Quoting keeps `EDITOR="code --wait"`-style commands working.
+      const child = spawn(`${editor} "${file}"`, { stdio: "inherit", shell: true });
+      child.on("error", reject);
+      child.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`${editor} exited with code ${code}`))));
+    });
+    return await readFile(file, "utf8");
+  } finally {
+    await rm(file, { force: true });
+  }
+}
+
 /**
  * Runs an interactive CLI REPL loop until the user types /exit, exit, /quit, quit, or sends SIGINT/EOF.
+ *
+ * Inputs are handled as *logical* inputs through one queue: a readline line, a
+ * bracketed multi-line paste (one `paste` event from the PasteFilter), and
+ * Ctrl-G editor results all become one turn each. A multi-line paste is
+ * submitted whole — newlines intact — instead of one turn per `\n`.
  */
 export async function runInteractiveReworkLoop(options: InteractiveLoopOptions): Promise<void> {
   const input = options.inputStream ?? defaultInput;
   const output = options.outputStream ?? defaultOutput;
   const s = styleFor(output);
+  const isTTY = Boolean((input as any).isTTY);
+  const openEditor = options.openEditor ?? defaultOpenInEditor;
+
+  // stdin → pasteFilter → readline: bracketed paste regions are swallowed by
+  // the filter (readline would split them at every `\n`) and surface as one
+  // `paste` event; everything else passes through byte-for-byte.
+  const pasteFilter = new PasteFilter();
+  (pasteFilter as any).isTTY = isTTY;
+  (pasteFilter as any).setRawMode = (mode: boolean) => (input as any).setRawMode?.(mode);
+  (input as NodeJS.ReadableStream).pipe?.(pasteFilter as any);
 
   const rl = readline.createInterface({
-    input: input as any,
+    input: pasteFilter as any,
     output: output as any,
-    terminal: Boolean((input as any).isTTY),
+    terminal: isTTY,
+  });
+  if (isTTY) output.write(BRACKETED_PASTE_ON);
+
+  // Logical-input queue: lines, pastes and editor results are dispatched
+  // strictly in arrival order, one at a time, even while a turn is running.
+  const queue: string[] = [];
+  let wake: (() => void) | null = null;
+  let closed = false;
+  const push = (text: string) => {
+    queue.push(text);
+    wake?.();
+  };
+  const clearLine = () => {
+    // Wipe whatever was typed at the prompt (terminal line editing only).
+    try {
+      rl.write(null, { ctrl: true, name: "u" } as any);
+    } catch {
+      /* non-terminal input: nothing on screen */
+    }
+  };
+
+  // Staged input: pastes are echoed for review and run on Enter — a paste
+  // never submits by itself.
+  let pending = "";
+
+  rl.on("line", (line) => {
+    if (pending) {
+      const text = line.trim() ? `${pending}\n${line}` : pending;
+      pending = "";
+      push(text);
+      return;
+    }
+    push(line);
+  });
+  rl.on("close", () => {
+    closed = true;
+    wake?.();
   });
 
-  if (options.banner) {
-    output.write(`${options.banner}\n\n`);
-  }
+  pasteFilter.on("paste", (raw) => {
+    const normalized = raw.replace(/\r\n/g, "\n");
+    const body = normalized.endsWith("\n") ? normalized.slice(0, -1) : normalized;
+    const typed = rl.line ?? "";
+    if (body.includes("\n")) {
+      // Multi-line paste: show it, stage it, and wait for Enter.
+      const text = typed ? typed + body : body;
+      clearLine();
+      output.write(`${text}\n`);
+      const lines = text.split("\n").length;
+      output.write(s.dim(`[pasted ${lines} line${lines === 1 ? "" : "s"} — Enter runs it]\n`));
+      pending = pending ? `${pending}\n${text}` : text;
+      output.write(options.promptLabel);
+      return;
+    }
+    // Single line (with or without its trailing newline): land it in the
+    // prompt line for review — Enter runs it, like anything typed.
+    rl.write(body);
+  });
 
-  output.write(options.promptLabel);
-
-  const cleanupThinking = setupVanishingThinking(options.session, output);
-
-  try {
-    for await (const line of rl) {
-      const trimmed = line.trim();
-      if (!trimmed) {
-        output.write(options.promptLabel);
-        continue;
-      }
-
-      if (
-        trimmed === "/exit" ||
-        trimmed === "exit" ||
-        trimmed === "/quit" ||
-        trimmed === "quit"
-      ) {
-        output.write(`\n${s.dim("Exiting interactive rework session.")}\n`);
-        break;
-      }
-
-      if (trimmed === "/help" || trimmed === "help") {
+  // Ctrl-G: compose the prompt in $VISUAL/$EDITOR (save+exit runs it, empty cancels).
+  let editing = false;
+  (pasteFilter as any).on("keypress", (_str: string, key: { ctrl?: boolean; name?: string } | undefined) => {
+    if (editing || !key?.ctrl || key.name !== "g") return;
+    editing = true;
+    void (async () => {
+      // Open with everything composed so far (staged paste + typed line) so it
+      // can be edited as one buffer.
+      const typedLine = rl.line ?? "";
+      const initial = pending ? (typedLine ? `${pending}\n${typedLine}` : pending) : typedLine;
+      clearLine();
+      try {
         output.write(
-          options.helpText ??
-            `
+          s.dim(
+            '[editor: write your prompt, then save+exit — it gets staged and Enter runs it; quit without saving to cancel (vim: Esc, then :wq or :q!)]\n',
+          ),
+        );
+        (input as any).pause?.();
+        (input as any).setRawMode?.(false);
+        let edited: string | null;
+        try {
+          edited = await openEditor(initial);
+        } finally {
+          (input as any).setRawMode?.(true);
+          (input as any).resume?.();
+        }
+        if (edited && edited.trim()) {
+          // Staged, like a paste: nothing runs without Enter.
+          pending = edited.trimEnd();
+          output.write(`${pending}\n`);
+          output.write(s.dim("[editor buffer staged — Enter runs it]\n"));
+          output.write(options.promptLabel);
+        } else {
+          output.write(`${s.dim("[editor cancelled]")}\n`);
+          output.write(options.promptLabel);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        output.write(`\n${s.red(`[error] editor failed: ${msg}`)}\n`);
+        output.write(options.promptLabel);
+      } finally {
+        editing = false;
+      }
+    })();
+  });
+
+  const handleInput = async (raw: string): Promise<"exit" | void> => {
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      output.write(options.promptLabel);
+      return;
+    }
+
+    if (
+      trimmed === "/exit" ||
+      trimmed === "exit" ||
+      trimmed === "/quit" ||
+      trimmed === "quit"
+    ) {
+      output.write(`\n${s.dim("Exiting interactive rework session.")}\n`);
+      return "exit";
+    }
+
+    if (trimmed === "/help" || trimmed === "help") {
+      output.write(
+        options.helpText ??
+          `
 Available commands:
   /check, /status   Inspect current vault on disk without calling LLM
   /exit, /quit      Exit interactive rework session
   /help             Show this help message
 
-Any other input is sent to the rework agent as directives/feedback.
+Compose: Ctrl-G opens $VISUAL/$EDITOR for the prompt (empty cancels); a paste is
+shown and staged — press Enter to run it. Anything else is a directive/feedback.
 \n`,
-        );
-        output.write(options.promptLabel);
-        continue;
-      }
-
-      if ((trimmed.startsWith("/") || trimmed === "status" || trimmed === "check") && options.onCommand) {
-        const normalized = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
-        const spaceIdx = normalized.indexOf(" ");
-        const cmd = spaceIdx === -1 ? normalized : normalized.slice(0, spaceIdx);
-        const rest = spaceIdx === -1 ? "" : normalized.slice(spaceIdx + 1).trim();
-        const cmdResult = await options.onCommand(cmd, rest);
-        if (cmdResult) {
-          output.write(`\n${s.border(cmdResult.trimEnd())}\n`);
-        }
-        output.write(options.promptLabel);
-        continue;
-      }
-
-      try {
-        const result = await options.onTurn(trimmed);
-        if (result) {
-          output.write(`\n${s.border(result.trimEnd())}\n`);
-        }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        output.write(`\n${s.red(`[error] rework turn failed: ${msg}`)}\n`);
-      }
-
+      );
       output.write(options.promptLabel);
+      return;
+    }
+
+    if ((trimmed.startsWith("/") || trimmed === "status" || trimmed === "check") && options.onCommand) {
+      const normalized = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+      const spaceIdx = normalized.indexOf(" ");
+      const cmd = spaceIdx === -1 ? normalized : normalized.slice(0, spaceIdx);
+      const rest = spaceIdx === -1 ? "" : normalized.slice(spaceIdx + 1).trim();
+      const cmdResult = await options.onCommand(cmd, rest);
+      if (cmdResult) {
+        output.write(`\n${s.border(cmdResult.trimEnd())}\n`);
+      }
+      output.write(options.promptLabel);
+      return;
+    }
+
+    try {
+      const result = await options.onTurn(trimmed);
+      if (result) {
+        output.write(`\n${s.border(result.trimEnd())}\n`);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      output.write(`\n${s.red(`[error] rework turn failed: ${msg}`)}\n`);
+    }
+
+    output.write(options.promptLabel);
+  };
+
+  if (options.banner) {
+    output.write(`${options.banner}\n\n`);
+  }
+  output.write(options.promptLabel);
+  const cleanupThinking = setupVanishingThinking(options.session, output);
+
+  try {
+    for (;;) {
+      while (queue.length > 0) {
+        const action = await handleInput(queue.shift()!);
+        if (action === "exit") return;
+      }
+      if (closed) return;
+      await new Promise<void>((resolve) => {
+        wake = resolve;
+      });
+      wake = null;
     }
   } finally {
     cleanupThinking();
+    if (isTTY) output.write(BRACKETED_PASTE_OFF);
+    (input as NodeJS.ReadableStream).unpipe?.(pasteFilter as any);
     rl.close();
   }
 }

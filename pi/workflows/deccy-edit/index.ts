@@ -411,6 +411,10 @@ export async function runEditInteractive(input: DeccyEditArgs): Promise<EditPayl
         helpRow("/undo", "Step back with `deccy undo` (0 LLM)."),
         helpRow("/exit, /quit", "Exit the session."),
         helpRow("/help", "Show this help message."),
+        helpRow("Ctrl-G", 'Compose in $VISUAL/$EDITOR (e.g. EDITOR="code --wait") — save+exit stages'),
+        helpRow("", "it (Enter runs it), quit without saving cancels. Staged pastes open there too."),
+        helpRow("paste", "Pastes are echoed and staged — press Enter to run (newlines kept);"),
+        helpRow("", "typing afterwards appends a line."),
         "",
         s.dim(
           "Any other input is an edit turn: the directive is applied to the working copy and answered",

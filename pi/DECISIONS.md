@@ -59,6 +59,29 @@ this records only the reasoning that isn't obvious from the code.
   `agents/deccy-agent.md` still carry the old skill-relative phrasing — syncing
   them is a separate task.
 
+## REPL input
+
+- **Logical-input queue** (`workflows/lib/interactiveRework.ts`): readline lines,
+  bracketed pastes, and Ctrl-G editor results all dispatch through one queue —
+  one input = one turn, arrival-ordered even while a turn is running.
+- **Paste is staged, never auto-submits** (`workflows/lib/pasteFilter.ts`): a
+  `\x1b[200~`…`\x1b[201~` region is swallowed from the readline stream and
+  re-emitted as one `paste` event, newlines intact (readline alone would
+  submit at every `\n`). The paste is echoed so the user sees what they
+  pasted, staged as pending input, and only **Enter** runs it; typing
+  afterwards appends a line. A single-line paste lands in the prompt line (its
+  trailing newline is dropped — paste never runs by itself). The filter
+  enables DECSET 2004 at start; terminals without bracketed paste keep the
+  per-line behavior.
+- **Ctrl-G opens `$VISUAL`/`$EDITOR`** for the prompt (temp file, inherited
+  stdio; `EDITOR="code --wait"` for VS Code — `--wait` is required so the
+  launcher blocks until the file closes). The buffer is pre-seeded with the
+  staged paste + typed line so it can be edited as one; a hint announces the
+  save/quit keys (vim: Esc then `:wq` run / `:q!` cancel). Save+exit **stages**
+  the buffer (echoed, `[editor buffer staged — Enter runs it]`) — nothing runs
+  without Enter — and quitting without saving cancels (`[editor cancelled]`).
+  The opener is an injectable seam (`openEditor`) for tests.
+
 ## deccy CLI quirks (verified against deccy 0.1.0)
 
 - `deccy new` inserts the new change after the newest `--on` id and rebases
