@@ -37,6 +37,8 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import type { StageSession, StageSessionFactory } from "../lib/stageJson.ts";
 import { runInteractiveReworkLoop, streamThinking } from "../lib/interactiveRework.ts";
+import { styleFor } from "../lib/ttyStyle.ts";
+import { renderMarkdown } from "../lib/mdTerm.ts";
 import { runHostValidators, type HostValidation } from "../lib/hostValidators.ts";
 import {
   createProcessRunner,
@@ -60,7 +62,10 @@ export const DECCY_EDIT_ROLE = {
   systemPromptFile: path.join(rolesDir, "deccy-edit.system.md"),
 };
 
-const log = (msg: string) => console.error(`[deccy-edit] ${msg}`);
+const log = (msg: string) => {
+  const s = styleFor(process.stderr);
+  console.error(`${s.dim("[deccy-edit]")} ${msg}`);
+};
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -302,6 +307,7 @@ export async function deccyEdit(input: DeccyEditArgs): Promise<EditPayload> {
 export async function runEditInteractive(input: DeccyEditArgs): Promise<EditPayload> {
   const request = (input.request ?? "").trim();
   const output = input.interactiveStreams?.outputStream ?? process.stdout;
+  const s = styleFor(output);
   const graphDir = path.resolve(process.cwd(), input.graphDir ?? ".");
   const runner = input.runner ?? createProcessRunner(graphDir);
   const { graph, problems, notes } = await loadGraphFromRepo(runner);
@@ -314,24 +320,57 @@ export async function runEditInteractive(input: DeccyEditArgs): Promise<EditPayl
   const session = await factory();
   const payload: EditPayload = { request, created: [], edited: [], deviations: [], validation: [], failed: false };
 
+  /** Validation state as a reply block: green ✓ when clean, red ✗ when not. */
+  const validationBlock = (v: HostValidation): string =>
+    v.ok
+      ? s.bold(s.green("✓ Validation: clean"))
+      : [
+          s.bold(s.red(`✗ Validation: ${v.lines.length} problem(s)`)),
+          ...v.lines.map((l) => s.red(`  - ${l}`)),
+        ].join("\n");
+
+  /** One `deccy log` line (<id> <kind> <summary>): id cyan, kind colored by kind. */
+  const logLine = (line: string): string => {
+    const m = line.match(/^(\S+)\s+(decision|evaluation)\s+(.*)$/);
+    if (!m) return line;
+    const kind = m[2] === "decision" ? s.magenta(m[2]) : s.yellow(m[2]);
+    return `${s.bold(s.cyan(m[1]))} ${s.bold(kind)} ${m[3]}`;
+  };
+
+  /** One help row: cyan command column (padded before styling), dim description. */
+  const helpRow = (cmdText: string, ...desc: string[]): string =>
+    [
+      `  ${s.bold(s.cyan(cmdText.padEnd(16)))}${s.dim(desc[0])}`,
+      ...desc.slice(1).map((d) => s.dim(`${" ".repeat(18)}${d}`)),
+    ].join("\n");
+
   const editTurn = async (line: string): Promise<string> => {
     const report = await runEditStage(session, { request: line, graph, notes, skillDir, rolesDir, graphRoot: graphDir });
     mergeReport(payload, report);
     const v = await runHostValidators(runner);
     payload.validation = v.lines;
-    return (
-      (report.summary ? `${report.summary}\n` : "") +
-      `Edit: ${report.created.length} node(s) created, ${report.edited.length} recorded.\n` +
-      (report.deviations.length > 0 ? `Deviations:\n${report.deviations.map((d) => `- ${d}`).join("\n")}\n` : "") +
-      (v.ok ? "Validation: clean" : `Validation: ${v.lines.length} problem(s)\n` + v.lines.map((l) => `- ${l}`).join("\n"))
+    const parts: string[] = [];
+    if (report.summary) parts.push(renderMarkdown(report.summary, s), "");
+    parts.push(
+      `${s.bold(s.cyan("Edit:"))} ${s.bold(s.green(String(report.created.length)))} ${s.dim("node(s) created,")} ` +
+        `${s.bold(s.cyan(String(report.edited.length)))} ${s.dim("recorded.")}`,
     );
+    if (report.deviations.length > 0) {
+      parts.push(
+        s.bold(s.yellow("Deviations:")),
+        ...report.deviations.map((d) => `${s.bold(s.yellow("-"))} ${s.yellow(d)}`),
+      );
+    }
+    parts.push(validationBlock(v));
+    return parts.join("\n");
   };
 
   const readOnlyTurn = async (mode: "ask" | "plan", question: string): Promise<string> => {
-    if (!question.trim()) return `Usage: /${mode} <${mode === "ask" ? "question" : "task"}>`;
+    if (!question.trim()) return s.dim(`Usage: /${mode} <${mode === "ask" ? "question" : "task"}>`);
     session.setTools?.(["read"]); // real read-only: mutations are off for this turn
     try {
-      return await runReadOnlyTurn(session, { mode, request: question, graph, notes, skillDir });
+      const answer = await runReadOnlyTurn(session, { mode, request: question, graph, notes, skillDir });
+      return renderMarkdown(answer, s);
     } finally {
       session.setTools?.([...DECCY_EDIT_ROLE.tools]);
     }
@@ -340,31 +379,47 @@ export async function runEditInteractive(input: DeccyEditArgs): Promise<EditPayl
   try {
     if (request) {
       log("running the positional request as the first turn...");
-      output.write(`${await editTurn(request)}\n`);
+      output.write(`${s.border((await editTurn(request)).trimEnd())}\n`);
     }
     await runInteractiveReworkLoop({
-      banner:
-        `[deccy-edit] interactive edit session.\nGraph: ${graphDir}\n` +
-        "Type directives to edit or add nodes, /ask <question> for read-only answers, " +
-        "/plan <task> to propose edits without applying, /check to run the validators, " +
-        "/status for deccy log, /undo to step back, /exit to quit.",
-      promptLabel: "[deccy-edit] > ",
-      helpText: `
-Available commands:
-  /ask <question>   Read-only Q&A about the graph ("summarize the nodes", "who owns src/x.ts").
-                    Tools are narrowed to ` + "`read`" + ` for the turn — nothing can be mutated.
-  /plan <task>      Read-only planning turn: proposes the edits (per node: fields/files and the
-                    ` + "`deccy record`" + ` calls) WITHOUT applying them. Say ` + "`apply`" + ` to execute
-                    the plan, or give corrections first.
-  /check            Run the validators: ` + "`deccy validate`" + ` + topology/custody checkers (0 LLM).
-  /status           Print ` + "`deccy log`" + ` — one line per node: id, kind, summary (0 LLM).
-  /undo             Step back with ` + "`deccy undo`" + ` (0 LLM).
-  /exit, /quit      Exit the session.
-  /help             Show this help message.
-
-Any other input is an edit turn: the directive is applied to the working copy and answered
-with a summary of what changed, the nodes touched, any deviations, and the validation state.
-\n`,
+      banner: [
+        s.bold("[deccy-edit] interactive edit session."),
+        `${s.dim("Graph:")} ${s.cyan(graphDir)}`,
+        s.dim(
+          "Type directives to edit or add nodes, /ask <question> for read-only answers, " +
+            "/plan <task> to propose edits without applying, /check to run the validators, " +
+            "/status for deccy log, /undo to step back, /exit to quit.",
+        ),
+      ].join("\n"),
+      promptLabel: `${s.bold(s.magenta("[deccy-edit]"))}${s.bold(s.green(" ❯ "))}`,
+      helpText: [
+        "",
+        s.bold("Available commands:"),
+        helpRow(
+          "/ask <question>",
+          'Read-only Q&A about the graph ("summarize the nodes", "who owns src/x.ts").',
+          "Tools are narrowed to `read` for the turn — nothing can be mutated.",
+        ),
+        helpRow(
+          "/plan <task>",
+          "Read-only planning turn: proposes the edits (per node: fields/files and the",
+          "`deccy record` calls) WITHOUT applying them. Say `apply` to execute",
+          "the plan, or give corrections first.",
+        ),
+        helpRow("/check", "Run the validators: `deccy validate` + topology/custody checkers (0 LLM)."),
+        helpRow("/status", "Print `deccy log` — one line per node: id, kind, summary (0 LLM)."),
+        helpRow("/undo", "Step back with `deccy undo` (0 LLM)."),
+        helpRow("/exit, /quit", "Exit the session."),
+        helpRow("/help", "Show this help message."),
+        "",
+        s.dim(
+          "Any other input is an edit turn: the directive is applied to the working copy and answered",
+        ),
+        s.dim(
+          "with a summary of what changed, the nodes touched, any deviations, and the validation state.",
+        ),
+        "",
+      ].join("\n"),
       inputStream: input.interactiveStreams?.inputStream,
       outputStream: input.interactiveStreams?.outputStream,
       session,
@@ -374,17 +429,20 @@ with a summary of what changed, the nodes touched, any deviations, and the valid
         if (cmd === "/check") {
           const v = await runHostValidators(runner);
           payload.validation = v.lines;
-          return v.ok ? "Validation: clean" : `Validation: ${v.lines.length} problem(s)\n` + v.lines.map((l) => `- ${l}`).join("\n");
+          return validationBlock(v);
         }
         if (cmd === "/status") {
           const res = await runner.deccy(["log"]);
-          return (res.stdout || res.stderr).trim() || "(deccy log produced no output)";
+          const text = (res.stdout || res.stderr).trim();
+          return text ? text.split("\n").map(logLine).join("\n") : s.dim("(deccy log produced no output)");
         }
         if (cmd === "/undo") {
           const res = await runner.deccy(["undo"]);
-          return res.code === 0 ? "deccy undo: done" : `deccy undo failed: ${(res.stderr || res.stdout).trim()}`;
+          return res.code === 0
+            ? s.green("deccy undo: done")
+            : s.red(`deccy undo failed: ${(res.stderr || res.stdout).trim()}`);
         }
-        return `Unknown command: ${cmd}. Type /help for available commands.`;
+        return s.yellow(`Unknown command: ${cmd}. Type /help for available commands.`);
       },
       onTurn: async (line) => {
         const directive =

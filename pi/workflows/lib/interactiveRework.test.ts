@@ -3,8 +3,8 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Writable } from "node:stream";
-import { streamThinking } from "./interactiveRework.ts";
+import { Readable, Writable } from "node:stream";
+import { runInteractiveReworkLoop, streamThinking } from "./interactiveRework.ts";
 
 /** Fake session: lets tests emit raw SDK-shaped events. */
 function fakeSession() {
@@ -46,6 +46,44 @@ test("streamThinking prints a thinking block as it streams", () => {
   session.emit({ type: "thinking_end" });
   stop();
   assert.equal(text(), "[thinking]\nlet me look at the nodes\n");
+});
+
+test("runInteractiveReworkLoop: TTY replies get the gutter, pipes stay plain", async () => {
+  const saved = {
+    NO_COLOR: process.env.NO_COLOR,
+    FORCE_COLOR: process.env.FORCE_COLOR,
+    TERM: process.env.TERM,
+  };
+  delete process.env.NO_COLOR;
+  delete process.env.FORCE_COLOR;
+  process.env.TERM = "xterm-256color";
+  try {
+    const ttyCap = capture();
+    (ttyCap.out as any).isTTY = true;
+    await runInteractiveReworkLoop({
+      promptLabel: "> ",
+      inputStream: Readable.from(["hello\n", "/exit\n"]),
+      outputStream: ttyCap.out,
+      onTurn: async () => "line one\nline two",
+    });
+    const stripAnsi = (t: string) => t.replace(/\x1b\[[0-9;]*m/g, "");
+    assert.match(stripAnsi(ttyCap.text()), /│ line one\n│ line two/);
+
+    const pipeCap = capture();
+    await runInteractiveReworkLoop({
+      promptLabel: "> ",
+      inputStream: Readable.from(["hello\n", "/exit\n"]),
+      outputStream: pipeCap.out,
+      onTurn: async () => "line one\nline two",
+    });
+    assert.match(pipeCap.text(), /\nline one\nline two\n/);
+    assert.equal(pipeCap.text().includes("│"), false);
+  } finally {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
 });
 
 test("streamThinking handles deltas without a start and stops on unsubscribe", () => {

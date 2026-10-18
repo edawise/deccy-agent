@@ -29,6 +29,21 @@ this records only the reasoning that isn't obvious from the code.
 - **Enforcement is tools, not prose**: read-only REPL turns (`/ask`, `/plan`)
   narrow the session to `read` via `setActiveToolsByName`.
 
+## Terminal output
+
+- **ANSI styling is stream-gated**: `workflows/lib/ttyStyle.ts` wraps raw SGR
+  codes only when the destination is a TTY (`NO_COLOR`/`TERM=dumb` disable,
+  `FORCE_COLOR` overrides) — pipes (tests, JSON consumers) get plain text, and
+  there is no terminal-color dependency.
+- **REPL replies get a cyan `│` gutter** (applied once in the REPL loop) so
+  model output reads as a block against echoed input; reply sections are colored
+  by meaning — `Edit:` counts green/cyan, deviations yellow, validation
+  ✓green/✗red, `deccy log` ids cyan with kinds magenta/yellow — with the
+  semantic formatting living in each workflow. **Reply prose is terminal
+  Markdown** (`workflows/lib/mdTerm.ts`): headings bold cyan, code yellow,
+  list bullets/numbers cyan, quotes dim, links cyan — identity on non-TTY
+  streams so pipes keep the raw Markdown.
+
 ## deccy CLI quirks (verified against deccy 0.1.0)
 
 - `deccy new` inserts the new change after the newest `--on` id and rebases

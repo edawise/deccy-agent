@@ -7,6 +7,7 @@
 import readline from "node:readline";
 import { stdin as defaultInput, stdout as defaultOutput } from "node:process";
 import type { StageSession } from "./stageJson.ts";
+import { styleFor } from "./ttyStyle.ts";
 
 export interface InteractiveLoopOptions {
   banner?: string;
@@ -161,6 +162,7 @@ export function streamThinking(
 export async function runInteractiveReworkLoop(options: InteractiveLoopOptions): Promise<void> {
   const input = options.inputStream ?? defaultInput;
   const output = options.outputStream ?? defaultOutput;
+  const s = styleFor(output);
 
   const rl = readline.createInterface({
     input: input as any,
@@ -190,7 +192,7 @@ export async function runInteractiveReworkLoop(options: InteractiveLoopOptions):
         trimmed === "/quit" ||
         trimmed === "quit"
       ) {
-        output.write("\nExiting interactive rework session.\n");
+        output.write(`\n${s.dim("Exiting interactive rework session.")}\n`);
         break;
       }
 
@@ -217,7 +219,7 @@ Any other input is sent to the rework agent as directives/feedback.
         const rest = spaceIdx === -1 ? "" : normalized.slice(spaceIdx + 1).trim();
         const cmdResult = await options.onCommand(cmd, rest);
         if (cmdResult) {
-          output.write(`\n${cmdResult}\n`);
+          output.write(`\n${s.border(cmdResult.trimEnd())}\n`);
         }
         output.write(options.promptLabel);
         continue;
@@ -226,11 +228,11 @@ Any other input is sent to the rework agent as directives/feedback.
       try {
         const result = await options.onTurn(trimmed);
         if (result) {
-          output.write(`\n${result}\n`);
+          output.write(`\n${s.border(result.trimEnd())}\n`);
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        output.write(`\n[error] rework turn failed: ${msg}\n`);
+        output.write(`\n${s.red(`[error] rework turn failed: ${msg}`)}\n`);
       }
 
       output.write(options.promptLabel);
