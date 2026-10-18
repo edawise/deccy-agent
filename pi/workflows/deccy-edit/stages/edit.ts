@@ -49,7 +49,10 @@ export interface EditReport {
 export function buildEditPrompt(args: EditArgs): string {
   const skillBody = readFileSync(path.join(args.skillDir, "SKILL.md"), "utf8");
   const roleBody = readFileSync(path.join(args.rolesDir, "deccy-edit.system.md"), "utf8");
-  const parts: string[] = [skillBody, "", "---", "", roleBody, "", "---", ""];
+  // The toolkit section leads the prompt: the skill body names the two checker
+  // scripts skill-relative, and the agent must see the absolute bundle paths
+  // (and "the target repo has no scripts/ directory") before those mentions.
+  const parts: string[] = [toolkitSection(args.graphRoot), skillBody, "", "---", "", roleBody, "", "---", ""];
 
   parts.push("# Edit task");
   parts.push("");
@@ -65,7 +68,6 @@ export function buildEditPrompt(args: EditArgs): string {
   if (args.notes && args.notes.length > 0) {
     parts.push("## Notes", ...args.notes.map((n) => `- ${n}`), "");
   }
-  parts.push(toolkitSection(args.graphRoot));
   parts.push(buildGraphDigest(args.graph));
   parts.push("Conclude with the edit-report block from your instructions.");
   parts.push("");
@@ -169,6 +171,13 @@ export function buildReadOnlyPrompt(args: ReadOnlyArgs): string {
       "",
     );
   }
+  parts.push(
+    "## Validation toolkit (read-only turn)",
+    "`deccy validate` and the two read-only checkers (`check-topology.py` / `check-ref-custody.py`) " +
+      "run host-side after every turn. The checkers ship in the deccy-agent skill bundle — the " +
+      "target repo has no `scripts/` directory; never report them missing or as a deviation.",
+    "",
+  );
   parts.push(`## Request\n${args.request}`);
   parts.push("");
   if (args.notes && args.notes.length > 0) {

@@ -109,11 +109,12 @@ deccy validate               # validity, resolution, and I4 coverage; silent whe
 
 `deccy validate` prints one `<check> <id> <reason>` line per failure (`validity`, `resolution`,
 `coverage`) and changes nothing. It does not check topological order or content custody; use the
-read-only scripts for those:
+read-only scripts for those — they ship in the deccy-agent skill bundle, not the target repo
+(`<skill-bundle>` is the skill's own directory, `<graph-root>` the graph repo):
 
 ```sh
-scripts/check-topology.py    # every prerequisite precedes its dependent
-scripts/check-ref-custody.py # no change touches another node's content
+python3 <skill-bundle>/scripts/check-topology.py <graph-root>    # every prerequisite precedes its dependent
+python3 <skill-bundle>/scripts/check-ref-custody.py <graph-root> # no change touches another node's content
 ```
 
 Both are diagnostics: they read `jj` history and report. The dependency story the graph records

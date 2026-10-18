@@ -44,6 +44,21 @@ this records only the reasoning that isn't obvious from the code.
   list bullets/numbers cyan, quotes dim, links cyan — identity on non-TTY
   streams so pipes keep the raw Markdown.
 
+## Skill trees
+
+- `skills/deccy-agent` (opencode `install.sh`) and `pi/skills/deccy-agent`
+  (`install-pi.sh`; what deccy-edit prepends) have **diverged** — SKILL.md
+  wording, reference filenames (`evaluation-conventions.md` vs
+  `evaluations.md`/`eval-cells.md`), even `check-topology.py` error text.
+  `pi/` is authoritative for deccy-edit.
+- The checker-script wording (skill-bundle-relative `scripts/…`, missing in the
+  target repo is never a deviation) was tightened in `pi/` only
+  (SKILL.md §3, `references/deccy-workflow.md`, `references/decision-placement.md`,
+  the role bullet, and prompt assembly: toolkit section first in edit prompts,
+  read-only guidance in `/ask`+`/plan`). The opencode tree and
+  `agents/deccy-agent.md` still carry the old skill-relative phrasing — syncing
+  them is a separate task.
+
 ## deccy CLI quirks (verified against deccy 0.1.0)
 
 - `deccy new` inserts the new change after the newest `--on` id and rebases

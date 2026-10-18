@@ -14,7 +14,7 @@ import type { StageSession } from "../lib/stageJson.ts";
 import type { DeccyRunner, RunResult } from "../lib/deccyCli.ts";
 import { fixtureDir, fixtureGraph } from "../lib/fixtures/graph/fixtureGraph.ts";
 import { deccyEdit, parseCli, runEditInteractive } from "./index.ts";
-import { buildEditPrompt, extractEditReport } from "./stages/edit.ts";
+import { buildEditPrompt, buildReadOnlyPrompt, extractEditReport } from "./stages/edit.ts";
 
 class FakeRunner implements DeccyRunner {
   root: string;
@@ -372,4 +372,30 @@ test("edit prompt carries the absolute toolkit paths (target repo has no scripts
   assert.match(prompt, /check-topology\.py \/tmp\/tb1/);
   assert.match(prompt, /check-ref-custody\.py \/tmp\/tb1/);
   assert.match(prompt, /record nodes\/<id>\.json --to <id>/);
+  // exactly one toolkit section, and it leads the prompt — before the skill
+  // body's script mentions and before the graph digest (the regression that
+  // made agents look for scripts/ in the target repo).
+  const first = prompt.indexOf("## Validation toolkit");
+  assert.ok(first >= 0, "toolkit section missing");
+  assert.equal(prompt.indexOf("## Validation toolkit", first + 1), -1, "more than one toolkit section");
+  assert.ok(first < prompt.indexOf("# Deccy graph work"), "toolkit must precede the skill body");
+  assert.ok(first < prompt.indexOf("Graph digest (compiled from"), "toolkit must precede the graph digest");
+});
+
+test("read-only prompts carry the toolkit guidance (no missing-scripts deviations)", () => {
+  const skillDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "skills", "deccy-agent");
+  for (const mode of ["ask", "plan"] as const) {
+    const prompt = buildReadOnlyPrompt({
+      mode,
+      request: "summarize the nodes",
+      graph: fixtureGraph(),
+      skillDir,
+    });
+    assert.match(prompt, /check-topology\.py/);
+    assert.match(prompt, /never report them missing/);
+    assert.ok(
+      prompt.indexOf("Validation toolkit") < prompt.indexOf("Graph digest (compiled from"),
+      "toolkit guidance must precede the graph digest",
+    );
+  }
 });

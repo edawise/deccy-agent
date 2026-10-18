@@ -63,15 +63,18 @@ explicitly rather than silently imposing the canonical layout.
   enforces custody at the door for recorded edits (it refuses a path the target does not own); the
   script below catches anything else.
 
-Check before finishing any graph work:
+Check before finishing any graph work. `<skill-bundle>` is the directory this SKILL.md lives in:
+the two checkers ship with the deccy-agent skill itself, **not** with the target graph repo (which
+has no `scripts/` directory). deccy-edit turns get their absolute paths in the "Validation toolkit"
+prompt section; elsewhere, resolve them relative to this file.
 
 ```sh
 # schema validity, edge resolution, and I4 coverage, in one pass (silent when clean)
 deccy validate
 # topological order: every prerequisite precedes its dependent (read-only)
-scripts/check-topology.py
+python3 <skill-bundle>/scripts/check-topology.py <graph-root>
 # content custody: no change touches another node's ref'd files or node file (read-only)
-scripts/check-ref-custody.py
+python3 <skill-bundle>/scripts/check-ref-custody.py <graph-root>
 # every decision has depends_on; every evaluation has evaluates
 jq -e 'select(.kind=="decision") | has("depends_on")' nodes/*.json >/dev/null
 jq -e 'select(.kind=="evaluation") | has("evaluates")' nodes/*.json >/dev/null
@@ -79,6 +82,9 @@ jq -e 'select(.kind=="evaluation") | has("evaluates")' nodes/*.json >/dev/null
 
 `deccy validate` covers validity, resolution and I4 coverage only; it does **not** check topology
 or custody — those are the two read-only scripts (failure line format: `references/deccy-workflow.md`).
+If you cannot resolve the checkers' absolute paths, skip them: the host runs `deccy validate` and
+both checkers after every turn regardless. A missing `scripts/…` path in the target repo is
+expected and is **never** a deviation.
 
 ## 4. Where a change goes (placement)
 

@@ -74,7 +74,7 @@ dependent (`evaluates` targets count as prerequisites for ordering — a check f
 checks):
 
 ```sh
-scripts/check-topology.py      # every prerequisite precedes its dependent (read-only)
+python3 <skill-bundle>/scripts/check-topology.py <graph-root>   # every prerequisite precedes its dependent (read-only)
 # or, by hand (newest first; every id named in depends_on/evaluates must appear below its user):
 jj log -r '::@' --no-graph -T 'change_id.shortest(8) ++ "\n"'
 ```
@@ -94,8 +94,10 @@ A report naming a prerequisite newer than its dependent is fixed by moving that 
 jj rebase -r <prereq> -B <dependent>                      # moves that node only
 # or, when something else must remain below the moved change:
 jj rebase -r <prereq> -A <the change it should follow>    # moves that node only
-scripts/check-topology.py                                 # the oracle
+python3 <skill-bundle>/scripts/check-topology.py <graph-root>   # the oracle
 ```
+
+(`scripts/…` are skill-bundle-relative — the checkers do not live in the graph repo.)
 
 Do **not** use `-s` here (`jj rebase -s <prereq> -B <dependent>`). In a linear stack `-s` takes the
 prerequisite's whole subtree — every change newer than it — and drags it along, reordering those

@@ -44,9 +44,12 @@ what changed.
 - Custody is machine-enforced: `deccy record` refuses paths the target does not
   own. That refusal means the edit belongs elsewhere (or nowhere yet) — report
   it as a deviation, never force it.
-- `deccy validate` and the topology/custody checkers run host-side after your
-  turn (from the deccy-agent skill, not this repo) — don't go looking for
-  checker scripts; just keep every edit in its owning change.
+- `deccy validate` and the topology/custody checkers run host-side after every
+  turn — the host re-runs them regardless. Self-check is optional and uses the
+  absolute paths from the Validation toolkit section of your prompt; the two
+  checkers live in the deccy-agent skill bundle, so a missing `scripts/…` path
+  in this repo is expected and is **never** a deviation. Just keep every edit
+  in its owning change.
 - One node at a time: finish (implement + `deccy record`) before starting the
   next. Never mix two nodes' paths in one `deccy record`.
 - A new node needs real prerequisites (`--on` existing change ids) and a
