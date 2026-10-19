@@ -38,6 +38,7 @@ import {
 import type { StageSession, StageSessionFactory } from "../lib/stageJson.ts";
 import { runInteractiveReworkLoop, streamThinking } from "../lib/interactiveRework.ts";
 import { makePathCompleter } from "../lib/pathComplete.ts";
+import type { CommandSpec } from "../lib/commandMenu.ts";
 import { styleFor } from "../lib/ttyStyle.ts";
 import { renderMarkdown } from "../lib/mdTerm.ts";
 import { runHostValidators, type HostValidation } from "../lib/hostValidators.ts";
@@ -62,6 +63,39 @@ export const DECCY_EDIT_ROLE = {
   thinkingLevel: "high",
   systemPromptFile: path.join(rolesDir, "deccy-edit.system.md"),
 };
+
+/** The REPL's slash commands — single source of truth for /help rows and the
+ *  "/" command menu (name/arg/desc[0] render in the menu, all lines in /help). */
+export const DECCY_EDIT_COMMANDS: CommandSpec[] = [
+  {
+    name: "/ask",
+    arg: "<question>",
+    desc: [
+      'Read-only Q&A about the graph ("summarize the nodes", "who owns src/x.ts").',
+      "Tools are narrowed to `read` for the turn — nothing can be mutated.",
+    ],
+  },
+  {
+    name: "/plan",
+    arg: "<task>",
+    desc: [
+      "Read-only planning turn: proposes the edits (per node: fields/files and the",
+      "`deccy record` calls) WITHOUT applying them. Say `apply` to execute",
+      "the plan, or give corrections first.",
+    ],
+  },
+  {
+    name: "/check",
+    desc: ["Run the validators: `deccy validate` + topology/custody checkers (0 LLM)."],
+  },
+  {
+    name: "/status",
+    desc: ["Print `deccy log` — one line per node: id, kind, summary (0 LLM)."],
+  },
+  { name: "/undo", desc: ["Step back with `deccy undo` (0 LLM)."] },
+  { name: "/exit", desc: ["Exit the session (also /quit)."] },
+  { name: "/help", desc: ["Show this help message."] },
+];
 
 const log = (msg: string) => {
   const s = styleFor(process.stderr);
@@ -396,22 +430,10 @@ export async function runEditInteractive(input: DeccyEditArgs): Promise<EditPayl
       helpText: [
         "",
         s.bold("Available commands:"),
-        helpRow(
-          "/ask <question>",
-          'Read-only Q&A about the graph ("summarize the nodes", "who owns src/x.ts").',
-          "Tools are narrowed to `read` for the turn — nothing can be mutated.",
-        ),
-        helpRow(
-          "/plan <task>",
-          "Read-only planning turn: proposes the edits (per node: fields/files and the",
-          "`deccy record` calls) WITHOUT applying them. Say `apply` to execute",
-          "the plan, or give corrections first.",
-        ),
-        helpRow("/check", "Run the validators: `deccy validate` + topology/custody checkers (0 LLM)."),
-        helpRow("/status", "Print `deccy log` — one line per node: id, kind, summary (0 LLM)."),
-        helpRow("/undo", "Step back with `deccy undo` (0 LLM)."),
-        helpRow("/exit, /quit", "Exit the session."),
-        helpRow("/help", "Show this help message."),
+        ...DECCY_EDIT_COMMANDS.map((c) => helpRow(`${c.name}${c.arg ? ` ${c.arg}` : ""}`, ...c.desc)),
+        helpRow("/", "Typing / as the first character of a line opens the command menu:"),
+        helpRow("", "Up/Down select, Enter accepts the command into the line (shown in color),"),
+        helpRow("", "Esc closes. A second Enter runs it."),
         helpRow("Ctrl-G", 'Compose in $VISUAL/$EDITOR (e.g. EDITOR="code --wait") — save+exit stages'),
         helpRow("", "it (Enter runs it), quit without saving cancels. Staged pastes open there too."),
         helpRow("paste", "Pastes are echoed and staged — press Enter to run (newlines kept);"),
@@ -430,6 +452,7 @@ export async function runEditInteractive(input: DeccyEditArgs): Promise<EditPayl
       inputStream: input.interactiveStreams?.inputStream,
       outputStream: input.interactiveStreams?.outputStream,
       completer: makePathCompleter(graphDir),
+      commands: DECCY_EDIT_COMMANDS,
       session,
       onCommand: async (cmd, arg) => {
         if (cmd === "/ask") return readOnlyTurn("ask", arg);

@@ -3,6 +3,12 @@
 // https://github.com/edawise/edagent) with the same behavior: readline prompt
 // lifecycle, /exit commands, graceful SIGINT, turn execution, and live
 // ephemeral thinking display for reasoning models.
+//
+// This fork adds the "/" command menu (commandMenu.ts): typing "/" as the
+// first character of an empty line pops up the commands, typing narrows the
+// list, Up/Down select and Enter accepts the command into the prompt line
+// (repainted in color) — never submitting it. Menu keys are claimed by the
+// PasteFilter before readline can act on them (see keyFilter/menukey there).
 
 import readline from "node:readline";
 import { spawn } from "node:child_process";
@@ -12,6 +18,13 @@ import path from "node:path";
 import { stdin as defaultInput, stdout as defaultOutput } from "node:process";
 import type { StageSession } from "./stageJson.ts";
 import { BRACKETED_PASTE_OFF, BRACKETED_PASTE_ON, PasteFilter } from "./pasteFilter.ts";
+import {
+  commandToken,
+  filterCommands,
+  renderMenu,
+  visibleWidth,
+  type CommandSpec,
+} from "./commandMenu.ts";
 import { styleFor } from "./ttyStyle.ts";
 
 export interface InteractiveLoopOptions {
@@ -24,6 +37,8 @@ export interface InteractiveLoopOptions {
   /** readline `completer` for Tab — e.g. makePathCompleter(graphDir). Gets the
    *  line up to the cursor, returns [matches, completeOn] (see pathComplete). */
   completer?: (line: string) => [string[], string];
+  /** Slash-command specs for the "/" menu (see commandMenu.ts). */
+  commands?: CommandSpec[];
   inputStream?: NodeJS.ReadableStream;
   outputStream?: NodeJS.WritableStream;
   session?: StageSession;
@@ -258,6 +273,7 @@ export async function runInteractiveReworkLoop(options: InteractiveLoopOptions):
   });
 
   pasteFilter.on("paste", (raw) => {
+    closeMenu();
     const normalized = raw.replace(/\r\n/g, "\n");
     const body = normalized.endsWith("\n") ? normalized.slice(0, -1) : normalized;
     const typed = rl.line ?? "";
@@ -277,8 +293,115 @@ export async function runInteractiveReworkLoop(options: InteractiveLoopOptions):
     rl.write(body);
   });
 
+  // ── "/" command menu (TTY only; needs options.commands) ─────────────────
+  //
+  // Opens only when "/" is typed as the very first character of an empty
+  // line (real typing — `rl.write`-landed pastes and editor buffers emit no
+  // keypress and can never open it), narrows as the user types, and Enter
+  // ACCEPTS the highlighted command into the prompt line — repainted in
+  // color — without submitting a turn. While the menu is open,
+  // Up/Down/Enter/Tab/Esc are swallowed by the PasteFilter BEFORE readline
+  // sees them (keyFilter/menukey there), so they move the selection instead
+  // of the cursor/history and Enter accepts instead of submitting. The menu
+  // is a redrawn region below the prompt row; the prompt row is repainted so
+  // an accepted command stays visible in color while its args are typed.
+  // Guarded by `editing`: while the Ctrl-G editor composes (vim, VS Code,
+  // anything), nothing here triggers — and the editor's keystrokes are
+  // dropped, never replayed into the prompt.
+  const commands = options.commands ?? [];
+  let editing = false; // true while the Ctrl-G editor owns the terminal
+  let menu: { items: CommandSpec[]; selected: number } | null = null;
+  let painted = false; // the prompt row currently shows a colored command
+  let menuShown = false; // the region below the prompt currently shows rows
+
+  /** Redraw the prompt row (with a colored command token) + the menu region. */
+  const repaint = () => {
+    if (!isTTY) return;
+    const line = rl.line ?? "";
+    const token = commandToken(line, commands);
+    const color = Boolean(token) && s.enabled;
+    const rows = menu ? renderMenu(menu.items, menu.selected, s) : [];
+    if (!menu && !color && !painted && !menuShown) return; // screen already correct
+    const cols = (output as any).columns || 80;
+    // Wrapped prompt row: leave readline's plain rendering alone (v1).
+    if (visibleWidth(options.promptLabel) + visibleWidth(line) >= cols) return;
+    let out = `\r\x1b[0J${options.promptLabel}${color ? s.bold(s.cyan(token!)) + line.slice(token!.length) : line}`;
+    if (rows.length > 0) out += `\r\n${rows.join("\r\n")}`;
+    const up = rows.reduce((n, r) => n + Math.max(1, Math.ceil(visibleWidth(r) / cols)), 0);
+    if (up > 0) out += `\x1b[${up}A`;
+    out += `\r\x1b[${visibleWidth(options.promptLabel) + rl.cursor + 1}G`;
+    output.write(out);
+    painted = color;
+    menuShown = rows.length > 0;
+  };
+
+  const closeMenu = () => {
+    if (!menu) return;
+    menu = null;
+    (pasteFilter as any).keyFilter = null;
+    repaint();
+  };
+
+  /** Keys the open menu claims from the input (see PasteFilter.keyFilter). */
+  const menuKeys = (unit: string): boolean => {
+    if (!menu) return false;
+    if (unit === "\x1b") return true; // Esc closes the menu
+    const nav = unit === "\x1b[A" || unit === "\x1bOA" || unit === "\x1b[B" || unit === "\x1bOB";
+    const accept = unit === "\r" || unit === "\n" || unit === "\t";
+    return (nav || accept) && menu.items.length > 0;
+  };
+
+  pasteFilter.on("menukey", (unit) => {
+    if (!menu) return;
+    if (unit === "\x1b") {
+      closeMenu();
+      return;
+    }
+    const n = menu.items.length;
+    if (unit === "\x1b[A" || unit === "\x1bOA") {
+      menu = { ...menu, selected: (menu.selected - 1 + n) % n };
+      repaint();
+      return;
+    }
+    if (unit === "\x1b[B" || unit === "\x1bOB") {
+      menu = { ...menu, selected: (menu.selected + 1) % n };
+      repaint();
+      return;
+    }
+    // Enter / Tab: accept the highlighted command into the line — never submit.
+    const item = menu.items[menu.selected];
+    menu = null;
+    (pasteFilter as any).keyFilter = null;
+    clearLine();
+    rl.write(item.arg ? `${item.name} ` : item.name);
+    repaint();
+  });
+
+  /** Menu maintenance + colored repaint — runs after readline handled a key. */
+  const syncMenu = (str: string) => {
+    if (editing) return;
+    const line = rl.line ?? "";
+    if (!menu && str === "/" && line === "/" && rl.cursor === 1 && !pending && commands.length > 0) {
+      menu = { items: filterCommands(commands, ""), selected: 0 };
+      (pasteFilter as any).keyFilter = menuKeys;
+      repaint();
+      return;
+    }
+    if (menu) {
+      if (line.startsWith("/") && !/\s/.test(line) && rl.cursor === line.length) {
+        const items = filterCommands(commands, line.slice(1));
+        if (items.length !== menu.items.length || items.some((c, i) => c !== menu.items[i])) {
+          menu = { items, selected: 0 }; // filter changed: reselect from the top
+        }
+      } else {
+        menu = null;
+        (pasteFilter as any).keyFilter = null;
+      }
+    }
+    repaint();
+  };
+
   // Ctrl-G: compose the prompt in $VISUAL/$EDITOR (save+exit runs it, empty cancels).
-  let editing = false;
   (pasteFilter as any).on("keypress", (_str: string, key: { ctrl?: boolean; name?: string } | undefined) => {
     if (editing || !key?.ctrl || key.name !== "g") return;
     editing = true;
@@ -288,12 +411,17 @@ export async function runInteractiveReworkLoop(options: InteractiveLoopOptions):
       const typedLine = rl.line ?? "";
       const initial = pending ? (typedLine ? `${pending}\n${typedLine}` : pending) : typedLine;
       clearLine();
+      closeMenu();
       try {
         output.write(
           s.dim(
             '[editor: write your prompt, then save+exit — it gets staged and Enter runs it; quit without saving to cancel (vim: Esc, then :wq or :q!)]\n',
           ),
         );
+        // The editor owns the terminal now: detach our input so keystrokes
+        // typed while composing (vim, VS Code, …) belong to the editor and
+        // are never replayed into the prompt or the menu afterwards.
+        (input as NodeJS.ReadableStream).unpipe?.(pasteFilter as any);
         (input as any).pause?.();
         (input as any).setRawMode?.(false);
         let edited: string | null;
@@ -301,7 +429,8 @@ export async function runInteractiveReworkLoop(options: InteractiveLoopOptions):
           edited = await openEditor(initial);
         } finally {
           (input as any).setRawMode?.(true);
-          (input as any).resume?.();
+          (input as any).pause?.();
+          (input as NodeJS.ReadableStream).pipe?.(pasteFilter as any);
         }
         if (edited && edited.trim()) {
           // Staged, like a paste: nothing runs without Enter.
@@ -323,7 +452,12 @@ export async function runInteractiveReworkLoop(options: InteractiveLoopOptions):
     })();
   });
 
+  // Menu maintenance + colored repaint — registered after readline's keypress
+  // handler, so rl.line already reflects the key that was just processed.
+  (pasteFilter as any).on("keypress", (str: string) => syncMenu(str));
+
   const handleInput = async (raw: string): Promise<"exit" | void> => {
+    closeMenu();
     const trimmed = raw.trim();
     if (!trimmed) {
       output.write(options.promptLabel);

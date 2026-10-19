@@ -92,6 +92,32 @@ this records only the reasoning that isn't obvious from the code.
   the buffer (echoed, `[editor buffer staged — Enter runs it]`) — nothing runs
   without Enter — and quitting without saving cancels (`[editor cancelled]`).
   The opener is an injectable seam (`openEditor`) for tests.
+- **The "/" command menu** (`workflows/lib/commandMenu.ts` +
+  `interactiveRework.ts`): typing "/" as the very first character of an empty
+  line pops up the commands (`DECCY_EDIT_COMMANDS` — the same registry `/help`
+  renders); more characters narrow the list by prefix, Up/Down move the
+  selection (wrap-around) and **Enter accepts** the highlighted command into
+  the prompt line — it never submits a turn; Esc closes and keeps the typed
+  text; with no matches Enter submits the line as-is. The accepted command is
+  **repainted in color** (bold cyan) in the prompt row while its arguments are
+  typed — CLI/TTY only; pipes and the `$EDITOR` compose buffer stay plain.
+  - *Key precedence*: the loop's keypress hooks run after readline's, so the
+    menu would lose every key to readline's history/submit. `pasteFilter.ts`
+    therefore decodes input into key units (single chars, CSI/SS3/Alt
+    sequences) and, while the menu is open, **swallows Up/Down/Enter/Tab/Esc
+    before readline sees them** (`keyFilter` → `menukey` events). A lone ESC or
+    split sequence is held ≤50 ms and flushed (Esc right before Enter is two
+    keys, never Alt+Enter); without a keyFilter the filter stays byte-transparent.
+  - *Real typing only*: `rl.write`-landed input (pastes, accepted commands) emits
+    no keypress, so a pasted "/" cannot open the menu — and while the Ctrl-G
+    editor composes (`editing`), stdin is unpiped from the filter: keystrokes
+    typed then belong to the editor (vim, VS Code) and are dropped, never
+    replayed into the prompt afterwards.
+  - *Live region*: the menu is redrawn under the prompt row (`\r\x1b[0J`, rows,
+    cursor restored to the echo column) on every relevant keystroke — including
+    the prompt-row repaint that carries the colored token — and cleared before
+    any turn output. A prompt row that wraps past the terminal width falls back
+    to readline's plain rendering (no menu/color painting).
 
 ## deccy CLI quirks (verified against deccy 0.1.0)
 
