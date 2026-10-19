@@ -21,6 +21,9 @@ export interface InteractiveLoopOptions {
   helpText?: string;
   onTurn: (userInput: string) => Promise<string | void>;
   onCommand?: (command: string, arg: string) => Promise<string | void> | string | void;
+  /** readline `completer` for Tab — e.g. makePathCompleter(graphDir). Gets the
+   *  line up to the cursor, returns [matches, completeOn] (see pathComplete). */
+  completer?: (line: string) => [string[], string];
   inputStream?: NodeJS.ReadableStream;
   outputStream?: NodeJS.WritableStream;
   session?: StageSession;
@@ -214,6 +217,7 @@ export async function runInteractiveReworkLoop(options: InteractiveLoopOptions):
     input: pasteFilter as any,
     output: output as any,
     terminal: isTTY,
+    completer: options.completer as any,
   });
   if (isTTY) output.write(BRACKETED_PASTE_ON);
 

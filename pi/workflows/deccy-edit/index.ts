@@ -37,6 +37,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import type { StageSession, StageSessionFactory } from "../lib/stageJson.ts";
 import { runInteractiveReworkLoop, streamThinking } from "../lib/interactiveRework.ts";
+import { makePathCompleter } from "../lib/pathComplete.ts";
 import { styleFor } from "../lib/ttyStyle.ts";
 import { renderMarkdown } from "../lib/mdTerm.ts";
 import { runHostValidators, type HostValidation } from "../lib/hostValidators.ts";
@@ -415,6 +416,8 @@ export async function runEditInteractive(input: DeccyEditArgs): Promise<EditPayl
         helpRow("", "it (Enter runs it), quit without saving cancels. Staged pastes open there too."),
         helpRow("paste", "Pastes are echoed and staged — press Enter to run (newlines kept);"),
         helpRow("", "typing afterwards appends a line."),
+        helpRow("Tab", "Complete a file/folder path in the graph dir (Tab again lists matches);"),
+        helpRow("", "directories keep a trailing / so the next Tab descends into them."),
         "",
         s.dim(
           "Any other input is an edit turn: the directive is applied to the working copy and answered",
@@ -426,6 +429,7 @@ export async function runEditInteractive(input: DeccyEditArgs): Promise<EditPayl
       ].join("\n"),
       inputStream: input.interactiveStreams?.inputStream,
       outputStream: input.interactiveStreams?.outputStream,
+      completer: makePathCompleter(graphDir),
       session,
       onCommand: async (cmd, arg) => {
         if (cmd === "/ask") return readOnlyTurn("ask", arg);

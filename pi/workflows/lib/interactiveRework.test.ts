@@ -3,11 +3,12 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { PassThrough, Readable, Writable } from "node:stream";
 import { defaultOpenInEditor, runInteractiveReworkLoop, streamThinking } from "./interactiveRework.ts";
+import { makePathCompleter } from "./pathComplete.ts";
 
 /** Fake session: lets tests emit raw SDK-shaped events. */
 function fakeSession() {
@@ -288,6 +289,60 @@ test("defaultOpenInEditor runs $EDITOR and returns the file content", async () =
   const out = await defaultOpenInEditor("seed text", { EDITOR: "true" });
   assert.equal(out, "seed text");
   await assert.rejects(() => defaultOpenInEditor("x", { EDITOR: "false" }), /exited with code/);
+});
+
+// ── Tab completion ────────────────────────────────────────────────────────
+
+test("Tab completes a file path in the prompt line", async () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "deccy-tab-test-"));
+  writeFileSync(path.join(root, "README.md"), "# hi\n");
+  const input = fakeTty();
+  const cap = capture();
+  const turns: string[] = [];
+  const done = runInteractiveReworkLoop({
+    promptLabel: "> ",
+    completer: makePathCompleter(root),
+    inputStream: input,
+    outputStream: cap.out,
+    onTurn: async (t) => {
+      turns.push(t);
+    },
+  });
+  input.write("REA");
+  input.write("\t"); // unique match: the word completes in place
+  await until(() => cap.text().includes("README.md"), "the completed path");
+  input.write("\n");
+  await until(() => turns.length === 1, "the completed turn");
+  assert.deepEqual(turns, ["README.md"]);
+  input.write("/exit\n");
+  await done;
+});
+
+test("Tab with several matches: a second Tab lists them and runs nothing", async () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "deccy-tab-test-"));
+  mkdirSync(path.join(root, "src"));
+  writeFileSync(path.join(root, "styles.css"), "x{}\n");
+  const input = fakeTty();
+  const cap = capture();
+  const turns: string[] = [];
+  const done = runInteractiveReworkLoop({
+    promptLabel: "> ",
+    completer: makePathCompleter(root),
+    inputStream: input,
+    outputStream: cap.out,
+    onTurn: async (t) => {
+      turns.push(t);
+    },
+  });
+  input.write("s");
+  input.write("\t"); // "s" is already the common prefix: nothing to insert
+  await until(() => cap.text().includes("> s"), "the first Tab (no change)");
+  input.write("\t"); // the second Tab lists the matches
+  await until(() => cap.text().includes("styles.css") && cap.text().includes("src/"), "the match list");
+  assert.deepEqual(turns, []); // listing never runs anything
+  input.write("\x15"); // clear the line before leaving
+  input.write("/exit\n");
+  await done;
 });
 
 test("defaultOpenInEditor passes the temp file path to the editor", async () => {

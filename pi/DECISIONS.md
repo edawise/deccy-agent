@@ -73,6 +73,17 @@ this records only the reasoning that isn't obvious from the code.
   trailing newline is dropped — paste never runs by itself). The filter
   enables DECSET 2004 at start; terminals without bracketed paste keep the
   per-line behavior.
+- **Tab completes paths word-level** (`workflows/lib/pathComplete.ts`): the
+  readline completer gets the line up to the cursor and returns
+  `[matches, completeOn]`, every match a full replacement of the trailing
+  word — cursor-correct even mid-line, with insertion and match listing done
+  by readline itself (a **second** Tab lists ambiguous matches; that is
+  Node's `previousKey was tab` rule). Paths resolve against the graph dir
+  (`./`, `../`, `~/` allowed; the typed prefix is kept verbatim in the
+  replacement), dirs complete with a trailing `/` so the next Tab descends,
+  `node_modules`/`.git`/`.jj` are never suggested, and dot-entries only when
+  the word starts with one. Slash words complete nothing — command naming
+  belongs to the command surface, not to path completion.
 - **Ctrl-G opens `$VISUAL`/`$EDITOR`** for the prompt (temp file, inherited
   stdio; `EDITOR="code --wait"` for VS Code — `--wait` is required so the
   launcher blocks until the file closes). The buffer is pre-seeded with the
