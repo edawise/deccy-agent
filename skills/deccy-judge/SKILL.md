@@ -37,17 +37,20 @@ Use two workspaces at the decision node, not the drafter’s workspace. For a re
 node is the existing target, and the base is its current state:
 
 ```sh
-JROOT="$ROOT/workspaces/judge/$ROUND/<handle>"
-jj workspace add "$JROOT/base" --name "deccy-$ROUND-<handle>-base" -r "$DECISION_ID"
-jj workspace add "$JROOT/cand" --name "deccy-$ROUND-<handle>-cand" -r "$DECISION_ID"
+JROOT="$ROOT/workspaces/judge/$ROUND/<component>/<handle>"
+jj workspace add "$JROOT/base" --name "deccy-$ROUND-<component>-<handle>-base" -r "$DECISION_ID"
+jj workspace add "$JROOT/cand" --name "deccy-$ROUND-<component>-<handle>-cand" -r "$DECISION_ID"
 ```
 
-Both workspaces’ `@` are children of the decision; the candidate code is `@-`.
+Both workspaces’ `@` are children of the decision; the candidate code is `@-`. Another component may
+record while you set up, so run `jj workspace update-stale` in each workspace immediately before
+its run.
 
 ### Base-red
 
 ```sh
 cd "$JROOT/base"
+jj workspace update-stale
 printf '%s\n' "$GATE_PATHS" | xargs -r jj restore --from "$EVAL_ID" --to @ --
 <red command>
 ```
@@ -63,6 +66,7 @@ turn it into a candidate rejection.
 
 ```sh
 cd "$JROOT/cand"
+jj workspace update-stale
 printf '%s\n' "$GATE_PATHS" | xargs -r jj restore --from "$EVAL_ID" --to @ --
 printf '%s\n' "$DRAFT_PATHS" | xargs -r jj restore --from "$DRAFT" --to @ --
 jj diff --summary -r @
@@ -96,8 +100,8 @@ gate is an advisory to the user, not a veto.
 ### Cleanup
 
 ```sh
-jj workspace forget "deccy-$ROUND-<handle>-base"
-jj workspace forget "deccy-$ROUND-<handle>-cand"
+jj workspace forget "deccy-$ROUND-<component>-<handle>-base"
+jj workspace forget "deccy-$ROUND-<component>-<handle>-cand"
 ```
 
 The judge’s workspaces are disposable; do not record anything.

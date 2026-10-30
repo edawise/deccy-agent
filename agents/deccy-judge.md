@@ -123,15 +123,19 @@ Create two workspaces at the **decision node**, not in the drafter’s workspace
 decision node is the existing target and the base is its current state:
 
 ```sh
-JROOT="$ROOT/workspaces/judge/$ROUND/<handle>"
-jj workspace add "$JROOT/base" --name "deccy-$ROUND-<handle>-base" -r "$DECISION_ID"
-jj workspace add "$JROOT/cand" --name "deccy-$ROUND-<handle>-cand" -r "$DECISION_ID"
+JROOT="$ROOT/workspaces/judge/$ROUND/<component>/<handle>"
+jj workspace add "$JROOT/base" --name "deccy-$ROUND-<component>-<handle>-base" -r "$DECISION_ID"
+jj workspace add "$JROOT/cand" --name "deccy-$ROUND-<component>-<handle>-cand" -r "$DECISION_ID"
 ```
+
+Another component may record while you set up, rebasing both workspaces. Refresh each one
+(`jj workspace update-stale`, then `jj status`) immediately before its run.
 
 ### Base
 
 ```sh
 cd "$JROOT/base"
+jj workspace update-stale
 printf '%s\n' "<gate-paths>" | xargs -r jj restore --from "<gate-id>" --to @ --
 <red command>                  # must fail for the gate's reason
 ```
@@ -146,6 +150,7 @@ resolve, is `inconclusive` — report what is broken; do not turn it into a cand
 
 ```sh
 cd "$JROOT/cand"
+jj workspace update-stale
 printf '%s\n' "<gate-paths>" | xargs -r jj restore --from "<gate-id>" --to @ --
 printf '%s\n' "<draft-paths>" | xargs -r jj restore --from "<draft-change>" --to @ --
 jj diff --summary -r @
