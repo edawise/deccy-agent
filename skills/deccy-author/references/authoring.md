@@ -31,15 +31,15 @@ The workspace is based at the **existing target**. That means:
   **not landable**.
 
 Your landable set is the draft diff minus `$GATE_PATHS`. It must contain only the target node file
-and the target’s ref files. Edit the existing node in place; keep `depends_on`/`evaluates` unchanged
-unless the orchestrator explicitly included a structure change. If the change needs a different
-commitment, a new edge, or a new node, stop: it is a `new` unit, not a refine.
+and the target’s ref files. Edit the existing node in place; keep `evaluates` unchanged and keep
+`depends_on` unchanged except for the edge the plan names. A new edge needs a covering evaluation
+(I4), which the orchestrator freezes before your draft opens. If the change needs a different
+commitment or a new node, stop: it is a `new` unit, not a refine.
 
 ## The decision document
 
 For a **new** unit, write `nodes/<decision-id>.json`. For a **refine**, edit the existing document
-in place; keep its `depends_on` and `evaluates` unless the orchestrator explicitly included a
-structure change.
+in place; keep its `evaluates` and keep `depends_on` except for the edge the plan names.
 
 ```json
 {
@@ -59,8 +59,8 @@ structure change.
 - `content.ref` is `"inline"` with `content.content`, or a list of repo-relative paths carrying
   the content. If you implement files, list them in `ref`; otherwise they are undocumented.
 - `content.rationale` says why this decision is right. Write it **after** the implementation.
-- `depends_on` names the prerequisites by change id. Do not add an edge to the gate evaluation;
-  the gate is coverage, not a decision prerequisite.
+- `depends_on` names the prerequisites by change id. Do not add the gate evaluation itself to
+  `depends_on`; the gate is coverage, not a decision prerequisite.
 
 Custody (I6): the only node file you may change is the target decision’s. A ref file belongs to
 the node whose `ref` lists it. If you need to change a file owned by another node, stop: that is a
@@ -119,8 +119,8 @@ decision may need its own layer rather than a rationale that rationalises the co
   not encode a guess.
 - **The gate is wrong/ungrounded** — stop; report gate-defect. The grant of authority is the gate,
   not your belief about the feature.
-- **The draft would need a new dependency edge, or the refine is really a new decision** — stop;
-  the layer plan did not cover it.
+- **The draft would need a dependency edge the plan did not name, or the refine is really a new
+  decision** — stop; the layer plan did not cover it.
 
 ## Report
 

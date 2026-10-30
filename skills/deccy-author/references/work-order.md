@@ -7,7 +7,8 @@
 >
 > **Refine.** For a refine unit the base is the existing target’s current state, the draft is based
 > at the target, and the gate paths are restored into the draft for running only. The landable set
-> is the draft diff minus the gate paths; the refine does not create a node or a new edge.
+> is the draft diff minus the gate paths. A refine does not create a decision node; it may add the
+> `depends_on` edge the plan names, which needs its own covering gate.
 
 The graph fixes *what* is decided and *what* checks it. This file fixes **when**: work descends
 through the decision graph, and every edge is gated before the dependent that uses it is built.
@@ -68,7 +69,7 @@ The cycle reads differently depending on whether the decision itself is new:
 - **New decision** — the decision node and its prose come first (the decision is the input), then
   its gate, then its dependents. Its prose is the decision, not a report on code.
 - **Refined or implemented decision** — the gate comes first, then red, green, and the decision's
-  prose last, as above. For a refine, the gate is reused or amended before the
+  prose last, as above. For a refine, the gate is reused, amended, or added before the
   implementation; the draft is based at the existing target, and the landable set excludes the
   gate paths restored for running.
 

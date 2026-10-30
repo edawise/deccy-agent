@@ -118,10 +118,11 @@ prerequisites. The gate may constrain the subject and its recorded prerequisites
 presuppose a decision that does not exist yet. If the implementation needs an unsettled
 prerequisite, stop; the round must settle it first.
 
-## 6. Amending an existing gate
+## 6. Amending or adding a refine gate
 
-A refine may reuse its evaluation or amend it. Amend when the old gate no longer covers the use,
-the decision’s behavior changed, or the old gate was too weak.
+A refine may reuse its evaluation, amend it, or add a new evaluation for an edge it adds. Amend when
+the old gate no longer covers the use, the decision’s behavior changed, or the old gate was too
+weak.
 
 - Open the gate draft at the **existing evaluation**; edit the evaluation document and its tests in
   place. Keep the change id; explain why the old gate no longer covers the use.
@@ -134,6 +135,10 @@ the decision’s behavior changed, or the old gate was too weak.
   before implementation.
 - Land the amended evaluation into its own node, then freeze a **new** hash. The old hash and any
   verdict based on it are void.
+
+Adding a new evaluation for a refine follows the same red rule: open the gate draft at the evaluation
+skeleton the skeleton pass created, author the check for the new use, and run red against the
+target’s current state in the check workspace.
 
 The orchestrator records and hashes the gate; you do not.
 

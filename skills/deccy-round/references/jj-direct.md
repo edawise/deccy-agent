@@ -34,7 +34,7 @@ jj diff --summary -r @
 | `jj workspace add <path> --name <name> -r <base>` | open a draft |
 | `jj workspace list` | see open drafts and stale state |
 | `jj workspace forget <name>` | drop a draft; check for an empty leftover head |
-| `scripts/abandon-empty-heads.sh [--force-stray]` | the only abandon path: verified stray heads; `--force-stray` also accepts a head whose every changed path is a byte-identical restore of an existing node document |
+| `scripts/abandon-empty-heads.sh [--force-stray] [--force-superseded]` | the only abandon path: verified stray heads; `--force-stray` also accepts a head whose every changed path is a byte-identical restore of an existing node's own content (its document or a path its `content.ref` lists); `--force-superseded` accepts a head whose every changed path is an existing `nodes/<owner>.json` and which jj reports as conflicted |
 | `jj workspace update-stale` | refresh a workspace after the trunk moved |
 | `jj status` | snapshot the draft and show changes |
 | `jj diff --summary -r @` | list the draft’s changed paths |
@@ -61,11 +61,12 @@ The orchestrator, and only the orchestrator, may use these two:
 - `jj describe -m "<summary>" <id>` — change a landed node's summary after a landing. This is
   the one raw-jj exception recorded in `deccy-core/references/cli.md`: summary only, never
   content or edges, and never before the content is judged and landed.
-- `scripts/abandon-empty-heads.sh --force-stray` — after a landing, abandon a head whose every
-  changed path is a byte-identical restore of an existing node document (a gate path restored
-  for review, or a similar draft artifact). The script still refuses the working copy, open
-  workspaces, bookmarked or described heads, node changes, and any non-restore diff. Direct
-  `jj abandon` remains forbidden.
+- `scripts/abandon-empty-heads.sh --force-stray --force-superseded` — after a landing, abandon a
+  head whose every changed path is a byte-identical restore of content an existing node owns (its
+  document or a path its `content.ref` lists), or a conflicted copy of existing node documents
+  (`--force-superseded`; a conflicted tree can never be recorded). The script still refuses the
+  working copy, open workspaces, bookmarked or described heads, node changes, and any other
+  non-empty diff. Direct `jj abandon` remains forbidden.
 - `jj restore` without `--from <draft> --to @` — it can wipe the working copy.
 - `jj new` inside a draft workspace — it creates a child change; the draft is the workspace’s
   `@`, and adding a child changes what “the draft” means.

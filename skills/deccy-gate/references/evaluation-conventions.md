@@ -49,6 +49,10 @@ The evaluation checks that *A's use of B is sound*: it evaluates the dependent `
 of the prerequisite `B`. The direct edge `A.depends_on ∋ B` stays — the evaluation is additional
 coverage, not a replacement.
 
+When a **refine** adds an edge to an existing decision, the covering evaluation is either an
+`amend` of an existing evaluation (extend its `depends_on` to include the new prerequisite and its
+check to cover the new use) or a new evaluation for that edge. The direct edge stays in both cases.
+
 ## Choosing the evaluation's form
 
 Before writing an evaluation, place both endpoints of the edge on the layer ladder by what

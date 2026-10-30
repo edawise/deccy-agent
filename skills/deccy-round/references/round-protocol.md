@@ -67,14 +67,17 @@ Before creating anything:
 2. Every `new` row has at least one `on` (I2) and `gate: new` (or a named existing evaluation that
    covers every edge the row adds).
 3. Every `refine` target exists, appears once, and is not created by this plan.
-4. Every row carries a licence: a recorded clause or an earlier plan row.
-5. No row depends on an unchosen fork. If one does, remove the dependants from this layer (they
+4. A `refine` that adds an edge names `gate: amend <id>` or `gate: new` (or `reuse <id>` only when
+   the existing evaluation already covers the edge), and the new prerequisite is already an
+   ancestor of the target.
+5. Every row carries a licence: a recorded clause or an earlier plan row.
+6. No row depends on an unchosen fork. If one does, remove the dependants from this layer (they
    belong to the next one); do not create their skeletons provisionally.
-6. Every row carries a `writes` set, and two rows share a path only along an `on` chain.
-7. Every recorded id named in `on` is an ancestor of the base tip; otherwise the skeleton pass could
+7. Every row carries a `writes` set, and two rows share a path only along an `on` chain.
+8. Every recorded id named in `on` is an ancestor of the base tip; otherwise the skeleton pass could
    fork. Check each one with `jj log -r '<id>::@' --no-graph -T 'change_id.shortest(8)'`; an empty
    result means it is not an ancestor.
-8. The layer is not larger than `max_units_per_layer`.
+9. The layer is not larger than `max_units_per_layer`.
 
 A failed check stops the round. Do not repair a plan by inventing a node, an edge or a gate.
 
@@ -116,8 +119,10 @@ For each `new` row, in dependency order:
    Record `G-<handle><TAB>id`. The `--on` set is what makes I4 coverage structural: the evaluation
    depends on exactly the decision's prerequisites and evaluates the decision.
 
-For a `refine <existing id>` row, create nothing. Record the target id under its handle, its
-current `ref` paths, its current `depends_on` set, and whether its gate is `reuse`d or `amend`ed.
+For a `refine <existing id>` row, create no decision skeleton. Record the target id under its
+handle, its current `ref` paths, its current `depends_on` set, and whether its gate is `reuse`d,
+`amend`ed, or `new`. A refine with `gate: new` creates its evaluation skeleton in this pass with
+`--on <new prereq>`.
 
 Do not edit a skeleton in the trunk. The role authors write the full node document (including
 `content.ref`) in their drafts. At landing, if a path is a new `ref`, record the node JSON first,
@@ -154,20 +159,22 @@ node. Inside a component, author them in dependency order: a unit's gate needs i
 landed content. Gates must be **recorded** one at a time: a record rewrites every change above the
 target, so every other open workspace needs a refresh afterwards.
 
-### 5.0 Reuse or amend a refine gate
+### 5.0 Reuse, amend or add a refine gate
 
-A **new** unit has a new evaluation. A **refine** unit may reuse its existing evaluation or amend
-it.
+A **new** unit has a new evaluation. A **refine** unit may reuse its existing evaluation, amend it,
+or add a new evaluation for an edge it adds.
 
-**Reuse.** Read the existing `$EVAL_ID`, confirm it still covers every edge the refine uses, then
-compute `$GATE_PATHS`/`$GATE_HASH` with 5.4 (skip the recording step). Do not open a gate draft. If
-the reused gate already passes on the target's current state and the refine is meant to change
-behavior, the gate is not red for that change: amend it or report that the change is already
-satisfied.
+**Reuse.** Read the existing `$EVAL_ID`, confirm it still covers every edge the refine uses
+(including any edge the refine adds; a new edge is covered only if the evaluation already depends
+on that prerequisite), then compute `$GATE_PATHS`/`$GATE_HASH` with 5.4 (skip the recording step).
+Do not open a gate draft. If the reused gate already passes on the target's current state and the
+refine is meant to change behavior, the gate is not red for that change: amend it or report that
+the change is already satisfied.
 
-**Amend.** Open a gate draft at the existing evaluation, exactly as 5.1. If the evaluation branch
-does not include the existing target, the orchestrator also opens a **check workspace** at the
-target and restores the new test paths into it; the gate author only runs the red command there:
+**Amend.** Open a gate draft at the existing evaluation, exactly as 5.1. Extend its `depends_on` to
+include the new prerequisite and its check to cover the new use. If the evaluation branch does not
+include the existing target, the orchestrator also opens a **check workspace** at the target and
+restores the new test paths into it; the gate author only runs the red command there:
 
 ```sh
 CHECK="$ROOT/workspaces/drafts/$ROUND/<component>/gate-check-<handle>"
@@ -176,6 +183,12 @@ cd "$CHECK"
 printf '%s\n' "$NEW_GATE_PATHS" | xargs -r jj restore --from "$GATE_DRAFT" --to @ --
 # hand $CHECK to the gate author; it runs <red command> there and does not edit the target
 ```
+
+**New evaluation.** A refine that adds an edge may need a separate evaluation instead of amending
+the existing one. The skeleton pass created it with `--on <new prereq>`. Open a gate draft at that
+evaluation, exactly as 5.1. Because the evaluation branch does not include the target, use the same
+check workspace rule as an amend: restore the new test paths into a workspace at `$TARGET_ID` and
+run the red command there.
 
 The check workspace is evidence only. Forget it after the red run. Land the gate draft into the
 evaluation with 5.3, freeze with 5.4, then continue.
@@ -213,10 +226,11 @@ cd "$WS"
 ```
 
 For a **new** gate, run against the prerequisite without the implementation. For an **amended**
-gate, run against the existing target's current state (see 5.0). It must fail for the reason the
-gate names; capture the command and failure. A test that passes before the implementation is
-already satisfied or not testing the decision: stop and fix the gate, unless it is an intentionally
-weak review criterion; then report it as weak and let the user accept the advisory.
+gate or a **new evaluation for a refine**, run against the existing target's current state (see
+5.0). It must fail for the reason the gate names; capture the command and failure. A test that
+passes before the implementation is already satisfied or not testing the decision: stop and fix the
+gate, unless it is an intentionally weak review criterion; then report it as weak and let the user
+accept the advisory.
 
 ### 5.3 Land
 
@@ -276,7 +290,8 @@ GATE_HASH=$(
 
 Store `$GATE_HASH` and `$GATE_PATHS` in the ledger. The implementation draft receives them. The
 judge recomputes the hash after applying the gate; a mismatch is a **gate-integrity** failure. For
-an amended gate, this hash replaces the old one; any verdict based on the old hash is void.
+an amended or newly added refine gate, this hash replaces the old one (or is the first); any
+verdict based on an older hash is void.
 
 ## 6. Implementation drafts: parallel, at the frozen gate
 
@@ -339,8 +354,8 @@ printf '%s\n' "$GATE_PATHS" | xargs -r jj restore --from "$EVAL_ID" --to @ --
 
 The gate paths are now in the workspace **for running only**. They are expected to appear in
 `jj diff --summary -r @` if they are not already in the target's tree; they are not part of the
-refine and must not be landed. The drafter edits the target's node JSON and its own ref files, runs
-the gate, and reports:
+refine and must not be landed. The drafter edits the target's node JSON (including the `depends_on`
+edge the plan names, if any) and its own ref files, runs the gate, and reports:
 
 ```sh
 cd "$WS"
@@ -486,16 +501,21 @@ working copy to the round tip, run the verified cleanup:
 
 ```sh
 ~/.config/opencode/skills/deccy-round/scripts/abandon-empty-heads.sh --dry-run
-~/.config/opencode/skills/deccy-round/scripts/abandon-empty-heads.sh --force-stray
+~/.config/opencode/skills/deccy-round/scripts/abandon-empty-heads.sh --force-stray --force-superseded
 jj log -r 'heads(all())'
 ```
 
 The script abandons heads that are empty, undescribed, unbookmarked, not an open workspace's
 working-copy commit, and not a node's own change (`nodes/<id>.json`). With `--force-stray`, it also
-abandons a head whose every changed path is a byte-identical restore of an existing node document —
-the gate-path-only head a review-criteria refine can leave. It refuses any other non-empty diff. It
-exits nonzero if any other head remains. Never run `jj abandon` directly. A nonzero exit is a stop:
-report the remaining head and ask, rather than forcing a one-line history.
+abandons a head whose every changed path is a byte-identical restore of content owned by an existing
+node — its document, or a path its `content.ref` array lists — the gate-path-only head a
+review-criteria refine can leave, and the landed draft head a forgotten implementation workspace can
+leave. With `--force-superseded`, it further abandons a head whose every changed path is an existing
+`nodes/<owner>.json` and which jj reports as conflicted: a conflicted tree can never be recorded, and
+that is the shape a judge workspace leaves when a candidate goes stale. A clean non-identical copy of
+a node document is still refused. It refuses any other non-empty diff. It exits nonzero if any other
+head remains. Never run `jj abandon` directly. A nonzero exit is a stop: report the remaining head and
+ask, rather than forcing a one-line history.
 
 ## 9. Close
 
@@ -549,9 +569,10 @@ directory and remove both files first.
 | Judge reports gate-weak | Advisory, not a stop. Record the evidence and ask the user whether to accept the weak gate or return it to the gate author. The candidate may stand. If the user returns it, the gate author amends; the old hash and verdict are void; re-freeze and re-judge. |
 | Judge reports gate-integrity | Stop the unit. The gate author reopens a gate draft; the old hash and verdict are void. Re-record the gate, re-freeze, re-open implementation drafts. |
 | Refine landable set contains a gate path | The draft edited the gate or the path subtraction failed. Stop; restore the gate path from `$EVAL_ID`, re-snapshot, and re-judge. Never land a gate path into the target. |
-| Refine needs a new edge or a different decision | Stop. That is a `new` unit (or a structure round), not a refine; do not fold it into the target. |
+| Refine needs an edge the plan did not name, or a different decision | Stop. An unnamed edge is a plan change; a different decision is a `new` unit (or a structure round). Do not fold either into the target. |
+| Refine edge inverts topology | Stop. The new prerequisite must already precede the target; the round does not rebase. Re-plan or move it to a structure round. |
 | Reused refine gate already passes on the target | The gate is not red for the change. Report `gate-weak`; the user decides whether the change is already satisfied or the gate must be amended first. |
-| `heads(all())` has a stray head after `workspace forget` | Run `scripts/abandon-empty-heads.sh`; it abandons verified empty, undescribed, unbookmarked, non-open-workspace, non-node heads. If the head is a gate-path-only restore, run it with `--force-stray`, which requires every changed path to be a byte-identical restore of an existing node document. If it exits nonzero, stop and report the remaining head. Never `jj abandon` directly. |
+| `heads(all())` has a stray head after `workspace forget` | Run `scripts/abandon-empty-heads.sh`; it abandons verified empty, undescribed, unbookmarked, non-open-workspace, non-node heads. If the head is a restore of content an existing node owns, run it with `--force-stray` (byte-identical only). If the head is a conflicted copy of existing node documents, add `--force-superseded`. It still refuses a clean non-identical node copy. If it exits nonzero, stop and report the remaining head. Never `jj abandon` directly. |
 | `heads(all())` has a non-empty head or more than one head after cleanup | Stop. The round produced a fork or left a real head; do not abandon a non-empty change or rebase. Report it and ask. |
 | Session died | `jj workspace list`; `cd` into the workspace; `jj status`; resume. The workspace and draft change survive. |
 | User changes scope mid-round | Stop the affected component; close or park its open drafts; re-plan that component as a new layer. Do not add a unit that was not in the approved layer. |

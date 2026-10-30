@@ -120,7 +120,8 @@ Full commands and failure handling: `references/round-protocol.md`; jj gotchas:
 2. **Skeletons.** Create **every** decision and gate skeleton with `deccy new`, in dependency
    order, before opening any workspace. Resolve handles to change ids as they are created and
    write the map to the ledger. For `gate: new`, create the evaluation skeleton immediately after
-   its decision with the same `on` set. Refine units create nothing.
+   its decision with the same `on` set; for a refine with `gate: new`, create it with
+   `--on <new prereq>` instead. A refine creates no decision skeleton.
 3. **Components.** Partition the units into weakly connected components over the `on` edges,
    ignoring landed prerequisites. Open one workstream per component; components run in parallel,
    units inside a component in dependency order.
@@ -129,8 +130,8 @@ Full commands and failure handling: `references/round-protocol.md`; jj gotchas:
    inside a component, author them in dependency order because a unit's gate needs its
    prerequisites' landed content. **Record** them one at a time with `jj restore` + `deccy record`,
    then refresh every open workspace and hash-freeze. A reused gate is verified and frozen without a
-   draft. An amended gate for a refine follows the check-workspace rule. A gate-author defect stops
-   that unit; a judge `gate-weak` advisory does not.
+   draft. An amended gate, or a new evaluation, for a refine follows the check-workspace rule. A
+   gate-author defect stops that unit; a judge `gate-weak` advisory does not.
 5. **Implementation drafts.** For a new unit, `jj workspace add` at the frozen evaluation; for a
    refine, at the existing target with the gate paths restored for running. Spawn one drafter per
    draft, up to `max_open_drafts` at a time. Within a component, only units whose prerequisites have
@@ -157,7 +158,8 @@ Full commands and failure handling: `references/round-protocol.md`; jj gotchas:
 
 - **No workspace before the last skeleton.** `deccy new` uses `jj new -A`, which reparents and
   makes every open workspace stale. Create all new skeletons first; never run `deccy new` while a
-  workspace is open.
+  workspace is open. A refine creates no decision skeleton; a refine with `gate: new` creates its
+  evaluation skeleton in this pass.
 - **Forks freeze before skeletons.** If a fork is unchosen, its dependants are not in this layer.
   Do not create their skeletons "provisionally".
 - **Records and landings are serial.** Gate and implementation landings are graph writes by the
@@ -169,8 +171,9 @@ Full commands and failure handling: `references/round-protocol.md`; jj gotchas:
 - **Refine gate paths are not landable.** A refine draft restores the gate test so it can run it;
   that path stays in the evaluation. Land only the target node and its own refs. A draft that edits
   a gate path is a gate-integrity failure.
-- **A refine is not a new decision.** If the change needs a different commitment, a new `depends_on`
-  edge or a new node, stop and plan a `new` unit instead.
+- **A refine is not a new decision.** A refine may add the `depends_on` edge the plan names, with a
+  gate that covers it (`amend` or `new`). If the change needs a different commitment or a new node,
+  stop and plan a `new` unit instead.
 - **Do not record a draft before the judge.** Judge every candidate clean-room; record only the
   accepted content.
 - **No self-attested red/green.** The gate author's red run is planning evidence; the judge's

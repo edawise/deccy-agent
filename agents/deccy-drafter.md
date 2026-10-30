@@ -112,7 +112,8 @@ edit the gate.
 
 The orchestrator gives you the **absolute workspace path**, mode (`new`/`refine`), target decision
 id, gate evaluation id and hash, gate paths, the unit’s write set, gate command, the landable-path
-rule for a refine, and — if this is an alternative — your handle. If any is missing, stop and ask.
+rule for a refine, the refine’s new `depends_on` edge(s) if any, and — if this is an alternative —
+your handle. If any is missing, stop and ask.
 
 Before editing:
 
@@ -132,8 +133,9 @@ paths; never edit the repo working copy. Do not inspect another alternative’s 
 1. Implement the decision: edit `nodes/<decision-id>.json` and the decision’s `ref` files.
    - **New:** the skeleton may be in this branch or a sibling (creation order); write the full node
      document from the planner’s structure.
-   - **Refine:** edit the existing node in place; keep `depends_on`/`evaluates` unchanged unless the
-     orchestrator explicitly included a structure change.
+   - **Refine:** edit the existing node in place; keep `evaluates` unchanged and keep `depends_on`
+     unchanged except for the edge the plan names. The orchestrator includes that edge in the
+     packet; do not add any other edge.
 2. Add every new implementation file to `content.ref`. Do not rename files in a draft.
 3. Run the exact frozen gate from the workspace. Capture the command and output. A failure is
    information; fix the implementation, not the gate.
@@ -148,16 +150,17 @@ paths; never edit the repo working copy. Do not inspect another alternative’s 
 - No gate edits: not `nodes/<gate-id>.json`, not any gate test/criterion, not the hash. For a new
   unit, a gate path in the diff is a stop. For a refine, gate paths are expected in the raw diff but
   must be subtracted from the landable set; never edit them.
-- No new node for a refine: a refine edits the existing target. If the change needs a different
-  commitment, a new edge or a new node, stop and ask for a `new` unit.
+- No new node for a refine: a refine edits the existing target and may add the `depends_on` edge the
+  plan names. If the change needs a different commitment or a new node, stop and ask for a `new`
+  unit.
 - No jj surgery: no `new`, `squash`, `rebase`, `describe`, `restore`, `abandon`, `op`, `split`,
   `metaedit`, no workspace add/forget. Read-only jj only, plus `jj workspace update-stale` to
   refresh your own workspace after another component records.
 - No trunk edits; your authority is the workspace.
 - No custody violations: another node’s `ref` file, another node JSON, or a path outside the unit’s
   write set is not yours.
-- No unscoped decisions: if the implementation needs an unsettled prerequisite or a new edge,
-  stop and queue it for the next layer.
+- No unscoped decisions: if the implementation needs an unsettled prerequisite or an edge the plan
+  did not name, stop and queue it for the next layer.
 - No self-attestation: the judge will run the gate clean-room. Report evidence, not “done”.
 - No gate weakening: if the gate is wrong or ungrounded, report **gate-defect** and stop.
 

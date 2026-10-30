@@ -179,13 +179,17 @@ and evidence.
 Follow `references/round-protocol.md` in `deccy-round`. In order:
 
 1. **Plan checks.** Validate handles, edges, licences, refine targets, forks, write sets and size.
-   Two units may share a path only along a dependency chain. A failed check stops the round; do not
-   repair the plan by inventing a node, an edge or a gate.
+   Two units may share a path only along a dependency chain. For a refine that adds an edge, require
+   a gate action that covers it (`amend` or `new`) and a prerequisite that already precedes the
+   target. A failed check stops the round; do not repair the plan by inventing a node, an edge or a
+   gate.
 2. **Skeleton pass.** Create **every** decision and evaluation skeleton with `deccy new`, in
    dependency order, before opening any workspace. Create each `gate: new` evaluation immediately
    after its decision with the same `--on` set. Record every `handle -> change id` in `map.tsv`.
-   Refine units create nothing. Do not edit a skeleton in the trunk; the role authors write the
-   full node in their drafts. After this phase, the trunk is touched only by landings.
+   Refine units create no decision skeleton; a refine with `gate: new` creates an evaluation
+   skeleton with `--on <new prereq>`, not next to its decision. Do not edit a skeleton in the trunk;
+   the role authors write the full node in their drafts. After this phase, the trunk is touched only
+   by landings.
 3. **Components.** Partition the units into weakly connected components over the plan's `on` edges;
    landed prerequisites connect nothing. A shared write path across components is a plan error, not
    an ordering hint. Record the partition in the ledger. Components run in parallel; units inside a
@@ -197,12 +201,14 @@ Follow `references/round-protocol.md` in `deccy-round`. In order:
    then hash-freeze. Pass the author the decision and prerequisite
    ids and the unit's write set — not a gate form: the author derives it from the evaluation matrix.
    The gate is recorded and frozen before any implementation draft opens. For a **reused** gate, verify coverage and freeze the existing hash; do not
-   edit it. For an **amended** gate, use the check-workspace rule. A gate-author defect stops the
-   unit; a judge `gate-weak` advisory does not.
+   edit it. For an **amended** gate, use the check-workspace rule. A refine that adds an edge must
+   amend an evaluation or add one; a new evaluation also runs its red check in the target check
+   workspace. A gate-author defect stops the unit; a judge `gate-weak` advisory does not.
 5. **Implementations.** For a new unit, open implementation workspace(s) at the frozen evaluation.
    For a refine, open the workspace at the **existing target**, then restore the gate paths into it
    for running. Spawn `deccy-drafter` with the workspace path, mode, target, gate id and hash,
-   gate paths, write set, gate command and — for refine — the landable path rule. Run at most
+   gate paths, write set, gate command, the refine's new `depends_on` edge(s) if any, and — for
+   refine — the landable path rule. Run at most
    `max_open_drafts` implementation drafts at once across all components. Alternatives are separate
    workspaces from the same base/gate; the drafters must not see each other.
 6. **Judge.** Spawn `deccy-judge` for each candidate with the mode, target id, gate id/hash/paths,
@@ -282,8 +288,9 @@ draft.
 - **Refine gate paths are not landable.** A refine draft restores the gate test to run it; that path
   belongs to the evaluation. Land only the target node and its own refs. A gate path in the
   landable set is a gate-integrity failure.
-- **A refine is not a new decision.** If the change needs a new commitment, a new edge or a new
-  node, stop and plan a `new` unit.
+- **A refine is not a new decision.** A refine may add the `depends_on` edge the plan names, with a
+  gate that covers it. If the change needs a different commitment or a new node, stop and plan a
+  `new` unit.
 - **No self-attested green.** The gate author's red is planning evidence; the judge's clean-room run
   is acceptance evidence. Record only judged content.
 - **No gate edits after freeze.** If the drafter needs the gate changed, stop; return it to the gate

@@ -26,8 +26,8 @@ A refine edits an existing decision. The clean-room shape is the same, with thre
 - the candidate paths are the **landable** set (target node + refs), not the raw draft diff; the
   drafter’s workspace also contains gate paths restored for running, and those are not candidate
   edits;
-- if the gate was **amended**, the hash must be the new frozen hash; any verdict based on the old
-  gate is void.
+- if the gate was **amended or newly created for the refine**, the hash must be the new frozen
+  hash; any verdict based on the old gate is void.
 
 Restore the gate paths from `$EVAL_ID` into both base and candidate. Restore only `$DRAFT_PATHS`
 (landable) from the draft into the candidate. If the draft’s landable set contains a gate path, the

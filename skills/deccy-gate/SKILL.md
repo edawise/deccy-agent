@@ -21,11 +21,13 @@ you do not record anything into the graph.
 - **Prerequisite id:** the node the evaluation `depends_on`.
 - **Target id (refine):** the existing decision being refined; the red check runs against its
   current state.
-- **Edge/use:** what use of the prerequisite the decision makes.
+- **Edge/use:** what use of the prerequisite the decision makes. For a refine that adds an edge,
+  this is the new edge; an `amend` extends the existing evaluation's `depends_on` to include the
+  new prerequisite and its check to cover the new use.
 - **Write set:** the evaluation node file and the test/criteria paths it may add (the plan row's
   `writes` cell).
-- **Check workspace (amend):** an optional workspace at the target, created by the orchestrator,
-  where the new test can be run against the target's current state.
+- **Check workspace (amend or refine-new):** an optional workspace at the target, created by the
+  orchestrator, where the new test can be run against the target's current state.
 
 The plan does **not** give you a gate form or a red command. Derive the form from the evaluation
 matrix (the two content layers) and the red command from the form; report both with your evidence.
@@ -56,15 +58,17 @@ Full conventions: `references/evaluation-conventions.md`. Form selection:
    `kind: evaluation`, `evaluates: [<decision>]`, `depends_on: [<prerequisite>]`,
    `content.type`, `content.ref` (test path or `inline` criteria), `content.rationale`.
    For `amend`, edit the existing document in place; keep the same change id and explain in the
-   report why the old gate no longer covered the use.
+   report why the old gate no longer covered the use. A refine that adds an edge must either amend
+   the existing evaluation (add the new prerequisite to `depends_on` and cover the new use) or use
+   the new evaluation the skeleton pass created for that edge.
 4. **Write the check.** For a test, write the test file named in `content.ref`. It must exercise
    the use, not restate the decision. For a non-runnable form, write the criterion/checklist. Use
    the planned test/criteria paths; if a path is new to the evaluation’s current `ref`, add it to
    `content.ref` and tell the orchestrator — it lands the node JSON first, then the new path.
 5. **Red.** Derive the red command from the form, then run it against the base:
    - a **new** gate runs against the prerequisite (no implementation);
-   - an **amended** gate runs against the existing target’s current state, using the check
-     workspace if the evaluation branch does not include the target.
+   - an **amended** gate or a **new evaluation for a refine** runs against the existing target’s
+     current state, using the check workspace if the evaluation branch does not include the target.
 
    It must fail for the reason the gate names. Quote the command and failure. A test that passes is
    already satisfied or not testing the use: stop and fix the gate. For a refine, if the reused gate

@@ -47,8 +47,9 @@ running; they are expected in the diff and must not be edited or landed.
 1. **Implement.** Edit only the target decision’s node file and its `ref` paths. New files are
    allowed only if they will be listed in the decision’s `ref` and recorded with it.
    - **New:** write the full node document from the planner’s structure.
-   - **Refine:** edit the existing node in place. Keep its `depends_on`/`evaluates` unchanged unless
-     the orchestrator explicitly included a structure change; a refine is not a new decision.
+   - **Refine:** edit the existing node in place. Keep `evaluates` unchanged and keep `depends_on`
+     unchanged except for the edge the plan names; the orchestrator includes it in the packet. A
+     refine is not a new decision.
 2. **Run the frozen gate.** Run the exact command from the orchestrator. Capture the command and
    output. A failure is information; fix the implementation, not the gate.
 3. **Re-run until green.** Green means the frozen gate passes, not that you believe it should.
@@ -65,15 +66,16 @@ running; they are expected in the diff and must not be edited or landed.
 - **No gate edits.** Do not edit `nodes/<gate-id>.json`, any gate test/criterion file, or the gate
   hash. If the gate is wrong, report a gate defect and stop. For a refine, the gate paths are in
   your workspace for running only; do not include them in the landable set.
-- **No new node for a refine.** A refine edits the existing target. If the change needs a different
-  commitment, a new `depends_on` edge, or a new node, stop and ask for a `new` unit.
+- **No new node for a refine.** A refine edits the existing target and may add the `depends_on` edge
+  the plan names. If the change needs a different commitment or a new node, stop and ask for a `new`
+  unit.
 - **No jj surgery.** No `jj new` inside the draft, no `squash`, `rebase`, `describe`, `restore`,
   `abandon`, `op`, `split` or `metaedit`. `cd` into the workspace, edit, run tests.
 - **No trunk edits.** Your edit/write authority is the workspace; use absolute paths under it.
   Never edit the repository working copy directly.
 - **No custody violations.** If a path belongs to another node’s `ref`, another `nodes/<id>.json`,
-  or is outside this unit’s declared writes set, stop. If the decision needs a new prerequisite,
-  stop and queue it for the next layer.
+  or is outside this unit’s declared writes set, stop. If the decision needs a prerequisite the plan
+  did not name, stop and queue it for the next layer.
 - **No peeking at alternatives.** If you are `alt-a`, do not read `alt-b`’s workspace. The
   comparison is the judge’s job.
 - **No verdicts in the graph.** Evidence goes in your report, never in a node.
@@ -85,7 +87,8 @@ Stop. Report one of:
 - **gate-defect** — the gate tests the wrong property, invents a rule, or cannot distinguish the
   prerequisite from the implementation;
 - **ungrounded** — the gate presupposes a decision that is not recorded;
-- **missing edge** — the implementation needs a prerequisite the layer did not settle.
+- **missing edge** — the implementation needs a prerequisite the layer did not settle (not the edge
+  the plan names).
 
 The orchestrator returns the gate to the gate author. You do not weaken it to fit your code.
 

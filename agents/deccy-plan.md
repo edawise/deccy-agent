@@ -215,8 +215,9 @@ Use `references/layer-plan.md` from `deccy-round`. Return **one table**, breadth
 
 - base, the seeds you read, scope, and explicit exclusions;
 - one row per node: local handle, `new` or `refine <existing id>`, the decision in one sentence,
-  `on` (recorded ids or earlier handles), gate action (`new` / `reuse <id>` / `amend <id>`), the
-  paths the unit may write, any fork, and the recorded clause that licenses it;
+  `on` (recorded ids or earlier handles; for a refine, `existing` plus any prerequisites the refine
+  adds), gate action (`new` / `reuse <id>` / `amend <id>`), the paths the unit may write, any fork,
+  and the recorded clause that licenses it;
 - open questions and stop conditions.
 
 Do **not** include gate forms, red commands, green conditions, test paths, implementation
@@ -233,10 +234,12 @@ prerequisites are landed. State why you chose each seed; do not quietly widen th
 - One row is one commitment (I1). Two commitments are two rows.
 - Every `new` decision has at least one `on` (I2). A root depends on `zzzzzzzz`.
 - A new decision gets one new gate by default (`gate: new`). That gate will depend on exactly the
-  row's `on` set and evaluate the row, which covers its edges (I4). Use `reuse` or `amend` only for
-  a refine.
-- `refine <id>` edits an existing decision. If it needs a different commitment, a new `depends_on`
-  edge or a new node, it is `new`.
+  row's `on` set and evaluate the row, which covers its edges (I4). A refine may `reuse` or `amend`
+  its evaluation, or use `new` when it adds an edge that needs its own evaluation.
+- `refine <id>` edits an existing decision and may add a `depends_on` edge to it. A new edge needs
+  I4 coverage: the row's gate action is `amend <id>` or `new`, never `reuse` unless the existing
+  evaluation already depends on the new prerequisite and checks the use. If it needs a different
+  commitment or a new node, it is `new`.
 - Each row names the paths it may write: the decision's `ref` files and the new gate's
   test/criteria paths. The node file is implicit. Two rows may not share a path unless one is an
   ancestor of the other; a shared path is never a reason to run them in parallel.
@@ -251,6 +254,8 @@ prerequisites are landed. State why you chose each seed; do not quietly widen th
 - A row needs a decision outside the seeds or scope: report it as the next layer's seed.
 - Two rows describe one commitment: merge them.
 - A refine target carries a different commitment: split it into a `new` row.
+- A refine's new prerequisite does not already precede the target: stop; the round cannot rebase
+  the inversion.
 - A fork is unresolved and its dependants are required: stop.
 - The layer exceeds the bound after deduplication: split it.
 
