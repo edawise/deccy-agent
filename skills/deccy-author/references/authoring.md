@@ -107,7 +107,7 @@ compromise that neither draft can explain.
 
 The decision’s rationale is the last thing you write. It states what the code now does and why the
 choice is right. If the implementation changed the intended decision, stop and say so; the
-decision may need its own round rather than a rationale that rationalises the code.
+decision may need its own layer rather than a rationale that rationalises the code.
 
 ## Stop rules
 
@@ -115,12 +115,12 @@ decision may need its own round rather than a rationale that rationalises the co
 - **Gate path appears in the landable set** — stop; you are editing or landing the gate. For a
   refine, gate paths in the raw diff are expected; subtract them.
 - **A path belongs to another node** — stop; custody.
-- **The implementation needs an unsettled prerequisite** — stop; queue it for the next round; do
+- **The implementation needs an unsettled prerequisite** — stop; queue it for the next layer; do
   not encode a guess.
 - **The gate is wrong/ungrounded** — stop; report gate-defect. The grant of authority is the gate,
   not your belief about the feature.
 - **The draft would need a new dependency edge, or the refine is really a new decision** — stop;
-  the round brief did not cover it.
+  the layer plan did not cover it.
 
 ## Report
 

@@ -19,7 +19,8 @@ graph, you do not write or edit the gate, and you do not attest your own success
 - **Workspace:** the absolute path of your draft.
 - **Target decision:** its change id. For a refine, this is an existing node; read it first.
 - **Frozen gate:** evaluation change id, gate hash, and the exact gate/test paths.
-- **Owned paths:** the target node file and the files its `ref` may carry.
+- **Write set:** the target node file and the paths the plan declares for this unit. A path
+  outside that set is a plan defect, not something to add silently.
 - **Gate command:** the command to run, and what red/green mean.
 - **Landable paths:** for a refine, the paths you may land (the target node and refs); the gate
   paths are not landable. For a new unit, the draft diff is landable.
@@ -70,8 +71,9 @@ running; they are expected in the diff and must not be edited or landed.
   `abandon`, `op`, `split` or `metaedit`. `cd` into the workspace, edit, run tests.
 - **No trunk edits.** Your edit/write authority is the workspace; use absolute paths under it.
   Never edit the repository working copy directly.
-- **No custody violations.** If a path belongs to another node’s `ref` or `nodes/<other>.json`,
-  stop. If the decision needs a new prerequisite, stop and queue it for the next round.
+- **No custody violations.** If a path belongs to another node’s `ref`, another `nodes/<id>.json`,
+  or is outside this unit’s declared writes set, stop. If the decision needs a new prerequisite,
+  stop and queue it for the next layer.
 - **No peeking at alternatives.** If you are `alt-a`, do not read `alt-b`’s workspace. The
   comparison is the judge’s job.
 - **No verdicts in the graph.** Evidence goes in your report, never in a node.
@@ -83,7 +85,7 @@ Stop. Report one of:
 - **gate-defect** — the gate tests the wrong property, invents a rule, or cannot distinguish the
   prerequisite from the implementation;
 - **ungrounded** — the gate presupposes a decision that is not recorded;
-- **missing edge** — the implementation needs a prerequisite the round did not settle.
+- **missing edge** — the implementation needs a prerequisite the layer did not settle.
 
 The orchestrator returns the gate to the gate author. You do not weaken it to fit your code.
 

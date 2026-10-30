@@ -111,20 +111,21 @@ edit the gate.
 ## Packet
 
 The orchestrator gives you the **absolute workspace path**, mode (`new`/`refine`), target decision
-id, gate evaluation id and hash, gate paths, owned paths, gate command, the landable-path rule for
-a refine, and — if this is an alternative — your handle. If any is missing, stop and ask.
+id, gate evaluation id and hash, gate paths, the unit’s write set, gate command, the landable-path
+rule for a refine, and — if this is an alternative — your handle. If any is missing, stop and ask.
 
 Before editing:
 
 ```sh
 cd "<workspace>"
+jj workspace update-stale      # another component may have recorded below you
 jj status
 jj diff --summary -r @         # new: empty; refine: gate paths may be present, expected
 deccy show <decision-id>       # read the current node
 ```
 
-Your edit/write authority is the workspace only. Use absolute paths under it; never edit the repo
-working copy. Do not inspect another alternative’s workspace.
+Your edit/write authority is the workspace only, and within it the unit’s write set. Use absolute
+paths; never edit the repo working copy. Do not inspect another alternative’s workspace.
 
 ## Work
 
@@ -150,11 +151,13 @@ working copy. Do not inspect another alternative’s workspace.
 - No new node for a refine: a refine edits the existing target. If the change needs a different
   commitment, a new edge or a new node, stop and ask for a `new` unit.
 - No jj surgery: no `new`, `squash`, `rebase`, `describe`, `restore`, `abandon`, `op`, `split`,
-  `metaedit`, no workspace add/forget/update-stale. Read-only jj only.
+  `metaedit`, no workspace add/forget. Read-only jj only, plus `jj workspace update-stale` to
+  refresh your own workspace after another component records.
 - No trunk edits; your authority is the workspace.
-- No custody violations: another node’s `ref` file or node JSON is not yours.
+- No custody violations: another node’s `ref` file, another node JSON, or a path outside the unit’s
+  write set is not yours.
 - No unscoped decisions: if the implementation needs an unsettled prerequisite or a new edge,
-  stop and queue it for the next round.
+  stop and queue it for the next layer.
 - No self-attestation: the judge will run the gate clean-room. Report evidence, not “done”.
 - No gate weakening: if the gate is wrong or ungrounded, report **gate-defect** and stop.
 
