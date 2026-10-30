@@ -22,12 +22,13 @@ you do not record anything into the graph.
 - **Target id (refine):** the existing decision being refined; the red check runs against its
   current state.
 - **Edge/use:** what use of the prerequisite the decision makes.
-- **Gate form:** test, fidelity, conformance, gate, review-criteria, measurement.
-- **Owned paths:** the evaluation node file and the test/criteria paths it may add.
-- **Red expectation:** the command to run and the reason it should fail.
+- **Write set:** the evaluation node file and the test/criteria paths it may add (the plan row's
+  `writes` cell).
 - **Check workspace (amend):** an optional workspace at the target, created by the orchestrator,
-  where the new test can be run against the target’s current state.
+  where the new test can be run against the target's current state.
 
+The plan does **not** give you a gate form or a red command. Derive the form from the evaluation
+matrix (the two content layers) and the red command from the form; report both with your evidence.
 If the edge is unsettled or the decision does not exist, stop; do not invent the subject.
 
 ## What a gate is
@@ -60,7 +61,7 @@ Full conventions: `references/evaluation-conventions.md`. Form selection:
    the use, not restate the decision. For a non-runnable form, write the criterion/checklist. Use
    the planned test/criteria paths; if a path is new to the evaluation’s current `ref`, add it to
    `content.ref` and tell the orchestrator — it lands the node JSON first, then the new path.
-5. **Red.** From the gate workspace, run the red command against the base:
+5. **Red.** Derive the red command from the form, then run it against the base:
    - a **new** gate runs against the prerequisite (no implementation);
    - an **amended** gate runs against the existing target’s current state, using the check
      workspace if the evaluation branch does not include the target.
