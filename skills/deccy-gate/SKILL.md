@@ -1,6 +1,7 @@
 ---
-name: Deccy gate
+name: deccy-gate
 description: Gate-author role for a deccy round. Writes the evaluation node and its tests/criteria in a gate workspace, runs the red check on the prerequisite, and freezes the gate before any implementation starts.
+disable-model-invocation: true
 metadata:
   opencode/autoinvoke: false
 ---

@@ -1,6 +1,7 @@
 ---
-name: Deccy judge
+name: deccy-judge
 description: Adversarial judge for a deccy round. Re-runs the frozen gate clean-room on base and candidate, checks gate integrity and counterexamples, and reports a verdict without writing the graph.
+disable-model-invocation: true
 metadata:
   opencode/autoinvoke: false
 ---

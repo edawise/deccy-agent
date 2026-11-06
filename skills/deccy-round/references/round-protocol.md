@@ -500,10 +500,14 @@ workspace keeps its `@` as a legitimate head and the cleanup refuses it. After r
 working copy to the round tip, run the verified cleanup:
 
 ```sh
-~/.config/opencode/skills/deccy-round/scripts/abandon-empty-heads.sh --dry-run
-~/.config/opencode/skills/deccy-round/scripts/abandon-empty-heads.sh --force-stray --force-superseded
+<deccy-round-skill-dir>/scripts/abandon-empty-heads.sh --dry-run
+<deccy-round-skill-dir>/scripts/abandon-empty-heads.sh --force-stray --force-superseded
 jj log -r 'heads(all())'
 ```
+
+`<deccy-round-skill-dir>` is the installed `deccy-round` skill directory:
+`~/.config/opencode/skills/deccy-round` for OpenCode, `~/.claude/skills/deccy-round` for Claude
+Code, or `<project>/.claude/skills/deccy-round` when linked per-project.
 
 The script abandons heads that are empty, undescribed, unbookmarked, not an open workspace's
 working-copy commit, and not a node's own change (`nodes/<id>.json`). With `--force-stray`, it also
@@ -547,7 +551,7 @@ The round is complete when the user approves the recorded result, not when the s
 After the user approves the close report, delete the round ledger:
 
 ```sh
-~/.config/opencode/skills/deccy-round/scripts/delete-round-state.sh "$ROUND"
+<deccy-round-skill-dir>/scripts/delete-round-state.sh "$ROUND"
 ```
 
 `ROUND.md` is live work state, not audit: the close report is the durable record. The script removes

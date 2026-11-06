@@ -1,6 +1,7 @@
 ---
-name: Deccy core
+name: deccy-core
 description: Core model and invariants for deccy decision graphs. Load before any deccy graph work; the role skill defines what this agent may do.
+disable-model-invocation: true
 metadata:
   opencode/autoinvoke: false
 ---

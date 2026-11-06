@@ -1,6 +1,7 @@
 ---
-name: Deccy author
+name: deccy-author
 description: Drafter role for one frozen-gate implementation draft (new or refine) in a deccy round. Edits only the target node and its ref files in its own jj workspace; never writes the graph or the gate.
+disable-model-invocation: true
 metadata:
   opencode/autoinvoke: false
 ---

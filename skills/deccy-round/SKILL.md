@@ -1,6 +1,7 @@
 ---
-name: Deccy round
+name: deccy-round
 description: Planner and orchestrator protocol for a deccy layer — a breadth-only node plan, one skeleton pass, parallel components with frozen gates, adversarial judging and user-chosen alternatives.
+disable-model-invocation: true
 metadata:
   opencode/autoinvoke: false
 ---
