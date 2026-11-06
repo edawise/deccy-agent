@@ -119,14 +119,20 @@ deccy validate               # validity, resolution, and I4 coverage; silent whe
 read-only scripts for those:
 
 ```sh
-scripts/check-topology.py    # every prerequisite precedes its dependent
-scripts/check-ref-custody.py # no change touches another node's content
+CORE="<deccy-core skill base directory>"
+python3 "$CORE/scripts/check-topology.py" [repo-root]    # every prerequisite precedes its dependent
+python3 "$CORE/scripts/check-ref-custody.py" [repo-root] # no change touches another node's content
 ```
+
+`<deccy-core skill base directory>` is the installed deccy-core skill directory:
+`~/.config/opencode/skills/deccy-core` for OpenCode, `~/.claude/skills/deccy-core` for Claude
+Code, or `<project>/.claude/skills/deccy-core` / `<project>/.opencode/skills/deccy-core` when
+linked per-project.
 
 Both are diagnostics: they read `jj` history and report. The dependency story the graph records
 lives in its edges, and `deccy new --on` positions new nodes correctly by construction. If
 `check-topology.py` reports an inversion, fix it with `jj rebase -s <prereq> -B <dependent>` and
-re-check.
+re-run `python3 "$CORE/scripts/check-topology.py" [repo-root]`.
 
 ## Recover
 

@@ -74,10 +74,16 @@ dependent (`evaluates` targets count as prerequisites for ordering — a check f
 checks):
 
 ```sh
-scripts/check-topology.py      # every prerequisite precedes its dependent (read-only)
+CORE="<deccy-core skill base directory>"
+python3 "$CORE/scripts/check-topology.py" [repo-root]  # every prerequisite precedes its dependent (read-only)
 # or, by hand (newest first; every id named in depends_on/evaluates must appear below its user):
 jj log -r '::@' --no-graph -T 'change_id.shortest(8) ++ "\n"'
 ```
+
+`<deccy-core skill base directory>` is the installed deccy-core skill directory:
+`~/.config/opencode/skills/deccy-core` for OpenCode, `~/.claude/skills/deccy-core` for Claude
+Code, or `<project>/.claude/skills/deccy-core` / `<project>/.opencode/skills/deccy-core` when
+linked per-project.
 
 A report naming a prerequisite newer than its dependent is fixed by moving that prerequisite
 **below** its dependents — and the cheapest fix is not to need one:
@@ -91,7 +97,7 @@ A report naming a prerequisite newer than its dependent is fixed by moving that 
 
 ```sh
 jj rebase -r <prereq> -A <the change it should follow>   # moves that node
-scripts/check-topology.py                                # the oracle
+python3 "$CORE/scripts/check-topology.py" [repo-root]    # the oracle
 ```
 
 Do **not** use `jj rebase -s <prereq> -B <dependent>`. In a linear stack `-s` takes the

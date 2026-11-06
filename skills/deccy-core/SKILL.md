@@ -41,10 +41,16 @@ It defines the graph; your role skill defines your authority and procedure.
 ## Check before finishing
 
 ```sh
+CORE="<deccy-core skill base directory>"
 deccy validate
-python3 scripts/check-topology.py
-python3 scripts/check-ref-custody.py
+python3 "$CORE/scripts/check-topology.py" [repo-root]
+python3 "$CORE/scripts/check-ref-custody.py" [repo-root]
 ```
+
+`<deccy-core skill base directory>` is the installed deccy-core skill directory:
+`~/.config/opencode/skills/deccy-core` for OpenCode, `~/.claude/skills/deccy-core` for Claude
+Code, or `<project>/.claude/skills/deccy-core` / `<project>/.opencode/skills/deccy-core` when
+linked per-project.
 
 `validate` covers schema validity, edge resolution and I4 coverage. The scripts are read-only and
 cover topological order and custody. Run the custody script **only when no draft workspaces are

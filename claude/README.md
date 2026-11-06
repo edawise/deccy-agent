@@ -208,7 +208,7 @@ to write outside its workspace.
 
 ## Known shared-file touches
 
-Two shared files were changed for this port; both are inert for the OpenCode integration's
+Three shared files were changed for this port; all are inert for the OpenCode integration's
 behaviour.
 
 - **`skills/*/SKILL.md` (five files)** — `name` is now the kebab-case directory name
@@ -221,3 +221,8 @@ behaviour.
   a `<deccy-round-skill-dir>` placeholder explained on the spot as the bundle's skill directory,
   `~/.claude/skills/deccy-round` here, or `<project>/.claude/skills/deccy-round` for a per-project
   link.
+- **`skills/deccy-core` reference text** — the topology/custody check-script invocations no
+  longer point at a project-root `scripts/` that nothing creates; they now use the
+  `CORE="<deccy-core skill base directory>"` + `"$CORE/scripts/check-*.py"` form with the three
+  install roots named on the spot, matching `round-protocol.md` §9. This fixes the missing path
+  for both integrations.
