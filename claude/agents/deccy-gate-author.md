@@ -31,9 +31,10 @@ deccy show <eval-id>           # amend: read the gate you are changing
 ```
 
 Your edit/write authority is the workspace only. Use absolute paths under it; never edit the repo
-working copy. Claude Code does not scope your writes to the draft workspace and does not block any
-`jj` verb; staying inside the workspace and inside the read-only jj surface below is protocol.
-Writes outside your workspace are a violation even though nothing blocks them.
+working copy. The deccy guard hook confines Edit/Write to
+`~/.local/share/deccy/agent/workspaces/drafts/` and blocks the graph and jj verbs below; staying
+inside *your* workspace is still yours to keep. **A blocked call is a denial, not a malfunction:**
+stop and report it; never route around it through the shell.
 
 ## Work
 

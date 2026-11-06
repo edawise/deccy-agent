@@ -30,9 +30,10 @@ deccy show <decision-id>       # read the current node
 
 Your edit/write authority is the workspace only, and within it the unit’s write set. Use absolute
 paths; never edit the repo working copy. Do not inspect another alternative’s workspace.
-Claude Code does not scope your writes to the draft workspace and does not block any `jj` verb;
-staying inside the workspace, inside the write set and inside the read-only jj surface below is
-protocol. Writes outside your workspace are a violation even though nothing blocks them.
+The deccy guard hook confines Edit/Write to `~/.local/share/deccy/agent/workspaces/drafts/` and
+blocks the graph and jj verbs below; staying inside *your* workspace and its write set is still
+yours to keep. **A blocked call is a denial, not a malfunction:** stop and report it; never route
+around it through the shell.
 
 ## Work
 

@@ -13,11 +13,15 @@ Two roles are **primary sessions** and three are **subagents**:
 
 | Role | File | How it runs |
 |---|---|---|
-| `deccy-plan` | `claude/agents/deccy-plan.md` | primary session (`run.sh plan`), read-only, no Edit/Write tools |
+| `deccy-plan` | `claude/agents/deccy-plan.md` | primary session (`run.sh plan`) or subagent; writes only plan files |
 | `deccy-orchestrator` | `claude/agents/deccy-orchestrator.md` | primary session (`run.sh orchestrator`), the only graph writer |
-| `deccy-gate-author` | `claude/agents/deccy-gate-author.md` | subagent, spawned by the orchestrator with Task |
-| `deccy-drafter` | `claude/agents/deccy-drafter.md` | subagent, spawned by the orchestrator with Task |
-| `deccy-judge` | `claude/agents/deccy-judge.md` | subagent, spawned by the orchestrator with Task, no Edit/Write tools |
+| `deccy-gate-author` | `claude/agents/deccy-gate-author.md` | subagent, spawned by the orchestrator with the Agent tool |
+| `deccy-drafter` | `claude/agents/deccy-drafter.md` | subagent, spawned by the orchestrator with the Agent tool |
+| `deccy-judge` | `claude/agents/deccy-judge.md` | subagent, spawned by the orchestrator with the Agent tool; writes only judge workspaces |
+
+Each role's OpenCode permission list (skills, subagents, edit paths, shell patterns) is enforced by
+`claude/hooks/deccy-guard.py`, a PreToolUse hook that `run.sh` loads for the session and every deccy
+subagent it spawns. See "How enforcement compares with OpenCode" below.
 
 ## Install
 
@@ -86,28 +90,31 @@ slash commands (`/deccy-core` runs one); they never appear in the model's own sk
 |---|---|
 | `deccy-plan` | `deccy-claude plan ["request"]` — with a request, one-shot: the layer table prints to the terminal; without, interactive |
 | `deccy-orchestrator` | `deccy-claude orchestrator ["request"]` — without a request, interactive (recommended for a round) |
-| gate-author / drafter / judge | never directly: the orchestrator dispatches them with the Task tool by name. Any Claude session can also dispatch them on request ("use the `deccy-judge` subagent to …") |
+| gate-author / drafter / judge | never directly: the orchestrator dispatches them with the Agent tool by name. Any Claude session can also dispatch them on request ("use the `deccy-judge` subagent to …"), but only a `run.sh` session (or the global hook below) guards them |
 
-`deccy-claude` (or `claude/run.sh` from a checkout) appends the agent file's body as the
-session's system prompt — Claude Code cannot be started *as* an agent file, so this is the
-`mode: all` equivalent of the OpenCode bundle. From a checkout without the launcher, use an
-alias:
+`deccy-claude` (or `claude/run.sh` from a checkout) has two launch modes — the `mode: all`
+equivalent of the OpenCode bundle — and loads the guard hook in both:
+
+| | `--mode append` (default) | `--mode agent` |
+|---|---|---|
+| Command | `claude --append-system-prompt <body> --tools <tools: line>` | `claude --agent deccy-<role>` |
+| System prompt | Claude Code's default prompt **plus** the role body | the role body **replaces** Claude Code's default prompt (the session opens "You are a Claude agent, built on Anthropic's Claude Agent SDK"); tool descriptions keep their own guidance |
+| Tool set | `tools:` line applied with `--tools` | `tools:` line applied by Claude Code |
+| Subagent allow list | guard hook only | `Agent(...)` in `tools:` **and** the guard hook |
+| Needs the agents linked | no — runs from a checkout | yes (`link.sh` / `install.sh`) |
+
+Both are kept until a fixture round shows whether the role bodies are enough without Claude Code's
+default prompt. `DECCY_CLAUDE_MODE=agent` makes `agent` the default. From a checkout without the
+launcher, use an alias:
 
 ```sh
 alias deccy-claude='/path/to/deccy-agent/claude/run.sh'
 ```
 
-Do not symlink `run.sh` into a bin directory: it locates its agent files relative to itself.
-Arguments after `--` pass through to `claude` — `deccy-claude plan "…" -- --model <model>` is
-worth using, since a weak session default makes for weak planning. The plan session already
-passes `--disallowedTools "Write,Edit"` itself.
-
-The raw equivalent, if you prefer to build the command yourself:
-
-```sh
-claude --append-system-prompt "$(./claude/run.sh plan --print-prompt)" \
-       --disallowedTools "Write,Edit" -p "Plan the next layer for <request>"
-```
+Do not symlink `run.sh` into a bin directory: it locates its agent files and the guard relative to
+itself. Arguments after `--` pass through to `claude` — `deccy-claude plan "…" -- --model <model>`
+is worth using, since a weak session default makes for weak planning. `python3` is required (the
+guard is Python, like the check scripts).
 
 ### Plan, then round
 
@@ -126,7 +133,7 @@ thing that crosses between the sessions — the plan is an artifact, not chat co
 
 Either way, the orchestrator then runs the round: skeleton pass, partition into components,
 then per unit a `deccy-gate-author` subagent, a `deccy-drafter` subagent and a `deccy-judge`
-subagent — each spawned with the Task tool, dispatched by agent name, with absolute workspace
+subagent — each spawned with the Agent tool, dispatched by agent name, with absolute workspace
 paths in the packet. It lands only judged work, keeps
 `~/.local/share/deccy/agent/rounds/<round>/ROUND.md` current, and deletes the ledger at close.
 
@@ -136,25 +143,13 @@ absolute paths on top of that. This bundle has not been hardened against a large
 
 ## Recommended session profiles
 
-Claude Code enforces permissions per **session**, not per subagent: a subagent inherits the session's
-rules and cannot be widened. So the primary session you launch is the security boundary, and the
-role separation *between* the three subagents is protocol.
+Claude Code's permission *rules* are per session: a subagent inherits them and cannot be widened.
+The per-role separation comes from the guard hook instead, which reads the calling agent's
+`agent_type` from the hook input and applies that role's list.
 
-**Plan session** — remove the tools the role must not have:
-
-```sh
-./claude/run.sh plan          # already passes --disallowedTools "Write,Edit"
-# or, raw:
-claude --append-system-prompt "$(./claude/run.sh plan --print-prompt)" \
-       --disallowedTools "Write,Edit"
-```
-
-`--disallowedTools` is the CLI form of a `deny` rule for one session. It removes the tools; it does
-not confine Bash, so the plan body's "never write" rule is still what keeps the shell from
-substituting for a missing `Edit` (see the enforcement table below). You can add
-`--permission-mode plan` for a second, read-only layer, but the flag above is what makes the
-missing tools structural. `deccy-plan.md` also lists no `Task` tool, so the plan role cannot spawn
-writers once it runs as a subagent.
+**Plan session** — `./claude/run.sh plan` needs nothing extra. Its tools are Read, Glob, Grep, Bash,
+Edit, Write and AskUserQuestion. The guard confines Edit/Write to `~/.local/share/deccy/agent/plan/`
+and applies OpenCode's read-only shell list. The planner cannot dispatch agents.
 
 **Orchestrator session** — run it with `--permission-mode acceptEdits` (or Shift+Tab once after
 it opens): on Manual, the round stalls on an approval prompt for nearly every graph write. Then
@@ -195,26 +190,53 @@ Do **not** point the plan directory at `.claude/` or `~/.claude/`. Those are pro
 there are never auto-approved, and `permissions.allow` rules are explicitly ignored for them. That is
 why the approved plan lives at `~/.local/share/deccy/agent/plan/`.
 
-## How enforcement differs from the OpenCode integration
+## How enforcement compares with OpenCode
 
-| Layer | Mechanism | Strength |
-|---|---|---|
-| Tool set per role | `tools:` in `claude/agents/*.md` | **Hard.** An unlisted tool does not exist in that subagent's session; there is no prompt to click through. |
-| Plan and judge are read-only | no `Edit`/`Write` in their `tools:` | **Hard.** The write has nowhere to go except the shell. |
-| Session-level bans | `--disallowedTools` on the plan session, `permissions.deny` in settings | **Hard** for the session, and inherited by its subagents. |
-| Within-session role separation (only the orchestrator mutates the graph; drafters stay in their workspace; the judge writes nothing) | prose "never" lists in the five bodies | **Advisory.** Nothing blocks an agent that ignores it. |
-| Per-role write scope (`~/.local/share/deccy/agent/...`) | protocol prose plus an `Edit(...)` **allow** rule | **Advisory.** An allow rule pre-approves; it does not confine. Only the missing tools are confinement. |
-| Bash surface (no `jj` surgery, no direct `jj abandon`, no `rm`) | prose, plus best-effort `Bash(...)` rules if you add them | **Best-effort.** Deny rules do not match an absolute path, `sh -c`, or `git -C`; they are a speed bump, not a boundary. |
+| OpenCode manifest entry | Claude Code mechanism |
+|---|---|
+| tool availability | `tools:` in `claude/agents/*.md` — applied by Claude Code (subagents, `--mode agent`) or by `--tools` (`--mode append`) |
+| `skill` allow list | guard: Skill calls outside the role's two skills are blocked |
+| `subagent` allow list (orchestrator: the four roles) | guard, plus `Agent(...)` in the orchestrator's `tools:` under `--mode agent` |
+| `edit` / `write` path allow list | guard: Edit/Write/MultiEdit/NotebookEdit outside the role's paths are blocked (plan → `plan/*`, orchestrator → `rounds/**` + `plan/*`, gate author and drafter → `workspaces/drafts/**`, judge → `workspaces/judge/**`) |
+| `shell` deny/allow patterns | guard: the same patterns, in the same order, last match wins |
+| `question` (planner) | `AskUserQuestion` in the planner's `tools:` (interactive sessions only) |
 
-The OpenCode integration expresses the same intent as per-resource permission manifests that a
-subagent cannot escape. Claude Code has no per-subagent permission file, so anything finer than the
-tool set is either a session-wide rule or a sentence the agent is expected to obey. Read the "hard" rows as
-the contract and the "advisory" rows as the protocol; do not assume a drafter is physically unable
-to write outside its workspace.
+The guard (`claude/hooks/deccy-guard.py`) matches shell patterns with OpenCode's semantics (`*`
+matches anything; a trailing ` *` also matches the bare command). It checks every sub-command of a
+compound command (`;`, `&&`, `||`, `|`, subshells, loops), the bodies of `$(...)`, backticks and
+`sh -c`, and strips env assignments, program paths, the wrappers `env`/`command`/`nohup`/`time`/
+`nice`/`timeout`/`xargs`, and jj/git global options before matching. Redirects to `/dev/null` are
+not treated as writes. A guard that crashes or is missing blocks the call (`|| exit 2`).
+
+What it does **not** give you:
+
+- **It is a guard, not a sandbox** — the same as OpenCode's pattern lists. A shell that writes
+  through a path no pattern anticipates (an unlisted interpreter for the drafter, say) gets through;
+  the prose "never" rules still apply.
+- **Within the drafts root, not per workspace.** A drafter may write anywhere under
+  `workspaces/drafts/`, as in OpenCode; staying in its *own* workspace is protocol.
+- **Only `run.sh` sessions are guarded.** Hooks declared in an agent file's frontmatter do not fire
+  (tested on Claude Code 2.1.319), so the guard rides on `--settings`. A deccy subagent dispatched
+  from an ordinary Claude session is unguarded unless you add the hook globally — safe, because
+  without `--main-role` the guard only acts on the five deccy agent types:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": "*",
+        "hooks": [{ "type": "command",
+                    "command": "python3 ~/.local/share/deccy/agent/bundle/claude/hooks/deccy-guard.py || exit 2" }] }
+    ]
+  }
+}
+```
+
+Run the guard's tests with `python3 -m unittest discover -s claude/hooks`.
 
 ## Limitations
 
-- **Subagent cwd.** The Task tool has no `cwd` parameter; a subagent inherits the primary session's
+- **Subagent cwd.** The Agent tool has no `cwd` parameter; a subagent inherits the primary session's
   working directory, and a `cd` inside a Bash call does not persist. The protocol therefore passes
   absolute workspace paths and instructs every role to `cd` for each shell command. That is the same
   limitation the bundle's README documents, not a new one.
@@ -228,11 +250,10 @@ to write outside its workspace.
 - **Bodies are adapted copies.** `claude/agents/*.md` are ports of `opencode/agents/*.md`, not the
   same file. Keep the protocol text, stop conditions and report formats in sync when the OpenCode
   agents change.
-- **No per-subagent permission widening.** Claude Code subagents inherit the session's rules; there
-  is no way to give `deccy-drafter` a Bash allow list that the orchestrator session does not also
-  hold.
-- **Session profile is manual.** Nothing in this folder stops you from launching the orchestrator
-  without the settings snippet, or a plan session without `--disallowedTools`.
+- **No per-subagent permission widening.** Claude Code subagents inherit the session's permission
+  rules; the guard can only *narrow* a role, never pre-approve something the session would prompt for.
+- **The orchestrator's approval profile is manual.** `run.sh` loads the guard but not the
+  `acceptEdits` mode or the allow snippet above; without them the round stalls on prompts.
 
 ## Known shared-file touches
 
