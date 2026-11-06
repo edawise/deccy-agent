@@ -59,12 +59,14 @@ PATCH_MOVE = re.compile(r"^\*\*\* Move to:\s*(.+?)\s*$")
 
 
 def agent_root() -> str:
-    return os.environ.get("DECCY_GUARD_ROOT") or os.environ.get("DECCY_AGENT_ROOT") \
+    root = os.environ.get("DECCY_GUARD_ROOT") or os.environ.get("DECCY_AGENT_ROOT") \
         or "~/.local/share/deccy/agent"
+    return os.path.expanduser(root)
 
 
 def state_root() -> str:
-    return os.environ.get("DECCY_STATE") or os.path.join(agent_root(), "state")
+    return os.path.expanduser(os.environ.get("DECCY_STATE") or
+                              os.path.join(agent_root(), "state"))
 
 
 def role_for_task(task_name: str) -> str | None:
@@ -138,7 +140,7 @@ def record_pending(session_id: str, task_name: str, role: str) -> bool:
     return True
 
 
-def consume_pending(session_id: str, task_name: str) -> str | None:
+def read_pending(session_id: str, task_name: str) -> str | None:
     path = pending_file(session_id, task_name)
     if not path:
         return None
@@ -147,18 +149,28 @@ def consume_pending(session_id: str, task_name: str) -> str | None:
             role = f.read().strip()
     except OSError:
         return None
-    if role not in ROLES:
-        return None
+    return role if role in ROLES else None
+
+
+def clear_pending(session_id: str, task_name: str) -> None:
+    path = pending_file(session_id, task_name)
+    if not path:
+        return
     try:
         os.unlink(path)
     except OSError:
         pass
-    return role
 
 
 # --- shell rule lists, copied from opencode/agents/*.md (order matters: last match wins) -----------
 
 D, A = "deny", "allow"
+
+# A role may not start another deccy root: `deccy-codex orchestrator` from a
+# planner or child would hand it a fresh, privileged DECCY_ROLE. Children never
+# need the launcher except for the register handshake, which is handled before
+# the shell rules.
+LAUNCHER_DENY = [(D, "deccy-codex *"), (D, "$DECCY_BIN *"), (D, "${DECCY_BIN} *")]
 
 GRAPH_WRITES = [(D, f"deccy {v} *") for v in ("init", "new", "record", "remove", "undo", "redo")]
 
@@ -167,15 +179,17 @@ PLAN_SHELL = (
                                 "restore", "split", "metaedit", "undo", "op")]
     + [(D, "jj workspace add *"), (D, "jj workspace forget *"), (D, "jj workspace update-stale *")]
     + GRAPH_WRITES
-    + [(D, p) for p in ("* > *", "* >> *", "* >| *", "cat *> *", "tee *", "* | tee *")]
+    + [(D, p) for p in ("* > *", "* >> *", "* >| *", "* &> *", "* &>> *",
+                        "cat *> *", "tee *", "* | tee *")]
     + [(D, f"{c} *") for c in ("rm", "mv", "cp", "install", "dd", "truncate", "touch", "mkdir",
                                "rmdir", "ln", "chmod", "chown", "sed", "awk", "perl", "python",
                                "python3", "node", "ruby", "sh", "bash", "zsh")]
     + [(D, "git add *"), (D, "git commit *"), (D, "git checkout *"), (D, "git reset *")]
+    + LAUNCHER_DENY
 )
 
 ORCHESTRATOR_SHELL = (
-    [(D, "jj new -A *"), (D, "jj squash *"), (D, "jj rebase *"), (D, "jj describe *"),
+    [(D, "jj new -A *"), (D, "jj squash *"), (A, "jj rebase *"), (D, "jj describe *"),
      (A, "jj describe -m *"),
      (D, "jj op *"), (D, "jj split *"), (D, "jj metaedit *"), (D, "jj abandon *"), (D, "jj undo *"),
      (D, "jj restore *"),
@@ -184,6 +198,7 @@ ORCHESTRATOR_SHELL = (
      (D, "deccy init *"), (D, "deccy remove *"),
      (D, "git commit *"), (D, "git push *"), (D, "git checkout *"), (D, "git reset *")]
     + [(D, f"{c} *") for c in ("rm", "mv", "cp", "tee", "dd", "truncate", "chmod", "chown")]
+    + LAUNCHER_DENY
 )
 
 AUTHOR_BASE = (  # gate author and drafter share this list
@@ -195,11 +210,11 @@ AUTHOR_BASE = (  # gate author and drafter share this list
     + [(A, "jj workspace update-stale *")]  # the protocol instructs it; last match wins
 )
 
-GATE_AUTHOR_SHELL = AUTHOR_BASE
+GATE_AUTHOR_SHELL = AUTHOR_BASE + LAUNCHER_DENY
 
 DRAFTER_SHELL = AUTHOR_BASE + (  # a refine restores gate paths into its draft for running
     [(A, "jj restore --from * --to @ -- *"), (A, "jj restore --from * --into @ -- *")]
-)
+) + LAUNCHER_DENY
 
 JUDGE_SHELL = (
     GRAPH_WRITES
@@ -207,6 +222,7 @@ JUDGE_SHELL = (
                                   "abandon", "undo", "restore")]
     + [(A, "jj restore --from * --to @ -- *"), (A, "jj restore --from * --into @ -- *")]
     + [(D, "git add *"), (D, "git commit *"), (D, "git reset *")]
+    + LAUNCHER_DENY
 )
 
 
@@ -496,11 +512,15 @@ def decide(event: dict) -> str | None:
             command = args.get("command") or args.get("cmd") or ""
             task = register_task(command)
             if task:
-                pending = consume_pending(event.get("session_id") or "", task)
-                if pending and write_role(event, pending):
-                    return None
-                return ("deccy guard: no pending role for `" + task + "`. "
-                        "Ask the orchestrator to spawn you with a role-prefixed task name.")
+                pending = read_pending(event.get("session_id") or "", task)
+                if not pending or role_for_task(task) != pending:
+                    return ("deccy guard: no pending role for `" + task + "`. "
+                            "Ask the orchestrator to spawn you with a role-prefixed task name.")
+                if not write_role(event, pending):
+                    return (f"deccy guard: could not record your role; check DECCY_STATE "
+                            f"({state_root()}).")
+                clear_pending(event.get("session_id") or "", task)
+                return None
         return ("deccy guard: register your role before any other tool call. Run exactly:\n"
                 "  \"$DECCY_BIN\" register <your task name>\n"
                 "The task name is in your spawn message.")
@@ -536,7 +556,7 @@ def decide(event: dict) -> str | None:
         return f"deccy guard: {role} may load only {', '.join(sorted(pol['skills']))}."
 
     if tool in PATCH_WRITE_TOOLS:
-        paths = patch_paths(args.get("command") or "")
+        paths = patch_paths(args.get("command") or args.get("patch") or "")
         if not paths:
             return (f"deccy guard: {role}: could not read the apply_patch paths; "
                     f"use one Add/Update/Delete/Move section per patch.")
