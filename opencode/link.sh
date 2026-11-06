@@ -1,17 +1,22 @@
 #!/bin/sh
 # Symlink the deccy skills and agents into OpenCode.
 #
-# Usage:
-#   ./link.sh                       # global: ~/.config/opencode/{skills,agents}
-#   ./link.sh --project <dir>       # <dir>/.opencode/{skills,agents}
-#   ./link.sh --uninstall           # remove only symlinks into this bundle
-#   ./link.sh --list                # show the links and their targets
+# Usage (from the bundle root):
+#   ./opencode/link.sh                       # global: ~/.config/opencode/{skills,agents}
+#   ./opencode/link.sh --project <dir>       # <dir>/.opencode/{skills,agents}
+#   ./opencode/link.sh --uninstall           # remove only symlinks into this bundle
+#   ./opencode/link.sh --list                # show the links and their targets
 #
 # Env overrides:
 #   DEST_SKILLS / DEST_AGENTS       destination directories
+#
+# Skills come from the shared `<repo>/skills`; agents from `<repo>/opencode/agents`.
 set -eu
 
-SRC=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+BUNDLE=$(CDPATH= cd -- "$HERE/.." && pwd)
+SRC_SKILLS="$BUNDLE/skills"
+SRC_AGENTS="$HERE/agents"
 PROJECT_DIR=""
 UNINSTALL=0
 LIST=0
@@ -21,7 +26,7 @@ while [ $# -gt 0 ]; do
     --project) PROJECT_DIR="${2:?--project needs a directory}"; shift 2;;
     --uninstall) UNINSTALL=1; shift;;
     --list) LIST=1; shift;;
-    -h|--help) sed -n '2,12p' "$0"; exit 0;;
+    -h|--help) sed -n '2,17p' "$0"; exit 0;;
     *) echo "unknown option: $1 (see --help)" >&2; exit 1;;
   esac
 done
@@ -37,7 +42,7 @@ fi
 is_ours() {
   target=$(readlink "$1")
   case "$target" in
-    "$SRC"/*) return 0;;
+    "$SRC_SKILLS"/*|"$SRC_AGENTS"/*) return 0;;
     *) return 1;;
   esac
 }
@@ -80,11 +85,11 @@ link_one() {
 }
 
 if [ "$UNINSTALL" -eq 1 ] || [ "$LIST" -eq 1 ]; then
-  for src in "$SRC"/skills/*; do
+  for src in "$SRC_SKILLS"/*; do
     [ -d "$src" ] || continue
     link_one "$src" "$DEST_SKILLS/$(basename "$src")"
   done
-  for src in "$SRC"/agents/*.md; do
+  for src in "$SRC_AGENTS"/*.md; do
     [ -f "$src" ] || continue
     link_one "$src" "$DEST_AGENTS/$(basename "$src")"
   done
@@ -93,11 +98,11 @@ fi
 
 mkdir -p "$DEST_SKILLS" "$DEST_AGENTS"
 
-for src in "$SRC"/skills/*; do
+for src in "$SRC_SKILLS"/*; do
   [ -d "$src" ] || continue
   link_one "$src" "$DEST_SKILLS/$(basename "$src")"
 done
-for src in "$SRC"/agents/*.md; do
+for src in "$SRC_AGENTS"/*.md; do
   [ -f "$src" ] || continue
   link_one "$src" "$DEST_AGENTS/$(basename "$src")"
 done

@@ -28,15 +28,22 @@ The bundle:
 
 All five set `opencode/autoinvoke: false`; the agent prompts load exactly the skills they need.
 
+## Layout
+
+`skills/` is shared at the root. `opencode/` and `claude/` are self-contained integrations — each
+has its own agents, `link.sh`, `install.sh` and README. Both link into their tool's discovery
+paths instead of copying, so updating a checkout (or the installer's clone, with `git pull`) is
+enough; the links stay live.
+
 ## Agents
 
-| ID | Mode | Use |
-|---|---|---|
-| `deccy-plan` | all | produce one layer plan (breadth only); read-only |
-| `deccy-orchestrator` | all | run the round; only graph writer |
-| `deccy-gate-author` | subagent | write one evaluation + red test |
-| `deccy-drafter` | subagent | implement one decision |
-| `deccy-judge` | subagent | judge a candidate |
+| ID | Use |
+|---|---|
+| `deccy-plan` | produce one layer plan (breadth only); read-only |
+| `deccy-orchestrator` | run the round; only graph writer |
+| `deccy-gate-author` | write one evaluation + red test |
+| `deccy-drafter` | implement one decision |
+| `deccy-judge` | judge a candidate |
 
 Start with `deccy-plan` to get a layer plan, then `deccy-orchestrator` to execute it. The
 orchestrator launches the other three roles. The plan’s separate prose/alternatives **reviewer**
@@ -101,7 +108,7 @@ jj workspace add "$WS" --name "deccy-<round>-<component>-<handle>" -r <base-chan
 ```
 
 The root is fixed because the agents’ edit permissions are scoped to it. Moving it
-requires editing those permissions in `agents/`.
+requires editing those permissions in `opencode/agents/`.
 
 The workspace’s `@` is the draft. Edit in place; never run `jj new` inside it. Run jj from inside
 the workspace (`cd "$WS" && jj ...`), not with `-R` from the trunk.
@@ -150,29 +157,18 @@ adds a new path, record the node file first (it updates `ref`), then record the 
 
 See `skills/deccy-round/references/jj-direct.md` for the allowed/forbidden surface.
 
-## Link into OpenCode
-
-The script symlinks each skill directory and agent file into OpenCode; it does not copy.
+## Install
 
 ```sh
-./link.sh                       # global: ~/.config/opencode/{skills,agents}
-./link.sh --project <dir>       # <dir>/.opencode/{skills,agents}
-./link.sh --uninstall           # remove only symlinks into this bundle
+# OpenCode
+curl -fsSL https://raw.githubusercontent.com/edawise/deccy-agent/main/opencode/install.sh | sh
+# Claude Code
+curl -fsSL https://raw.githubusercontent.com/edawise/deccy-agent/main/claude/install.sh | sh
 ```
 
-Then check:
-
-```sh
-opencode debug agents | grep deccy
-ls -la ~/.config/opencode/skills/deccy-*
-```
-
-Run one:
-
-```sh
-opencode run --agent deccy-plan "Plan the next layer for <request>"
-opencode run --agent deccy-orchestrator "Execute the approved layer plan"
-```
+Each installer clones the bundle once (`~/.local/share/deccy/agent/bundle`, shared by both) and
+runs that folder's `link.sh`. See `opencode/README.md` and `claude/README.md` for per-project
+installs, session profiles and enforcement notes.
 
 Use a fixture repository first. This bundle has not been hardened against a large graph (hundreds of
 nodes).

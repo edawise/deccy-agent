@@ -4,7 +4,7 @@
 
 This folder is the Claude Code port of the deccy multi-agent bundle: the same five roles, the same
 round protocol, wired to Claude Code's subagent files instead of a permission manifest. The skills
-are shared with the root bundle (`../skills`); only the integration is Claude-specific. The round
+are shared with the bundle root (`../skills`); only the integration is Claude-specific. The round
 itself — layer plan, skeleton pass, parallel components, frozen gates, clean-room judging,
 user-chosen alternatives — is described in the root `README.md` and in `skills/deccy-round`; this
 file covers installation, launch, and what Claude Code does and does not enforce.
@@ -13,16 +13,37 @@ Two roles are **primary sessions** and three are **subagents**:
 
 | Role | File | How it runs |
 |---|---|---|
-| `deccy-plan` | `agents/deccy-plan.md` | primary session (`run.sh plan`), read-only, no Edit/Write tools |
-| `deccy-orchestrator` | `agents/deccy-orchestrator.md` | primary session (`run.sh orchestrator`), the only graph writer |
-| `deccy-gate-author` | `agents/deccy-gate-author.md` | subagent, spawned by the orchestrator with Task |
-| `deccy-drafter` | `agents/deccy-drafter.md` | subagent, spawned by the orchestrator with Task |
-| `deccy-judge` | `agents/deccy-judge.md` | subagent, spawned by the orchestrator with Task, no Edit/Write tools |
+| `deccy-plan` | `claude/agents/deccy-plan.md` | primary session (`run.sh plan`), read-only, no Edit/Write tools |
+| `deccy-orchestrator` | `claude/agents/deccy-orchestrator.md` | primary session (`run.sh orchestrator`), the only graph writer |
+| `deccy-gate-author` | `claude/agents/deccy-gate-author.md` | subagent, spawned by the orchestrator with Task |
+| `deccy-drafter` | `claude/agents/deccy-drafter.md` | subagent, spawned by the orchestrator with Task |
+| `deccy-judge` | `claude/agents/deccy-judge.md` | subagent, spawned by the orchestrator with Task, no Edit/Write tools |
 
 ## Install
 
+```sh
+curl -fsSL https://raw.githubusercontent.com/edawise/deccy-agent/main/claude/install.sh | sh
+```
+
+The installer clones the bundle to `~/.local/share/deccy/agent/bundle` and runs
+`claude/link.sh` from there. Options: `--project <dir>` for a project-local install into
+`<dir>/.claude`, `--ref <branch|tag>`, `--from <dir>` to use an existing checkout in place,
+`--list`, `--uninstall`, `--purge`. `REPO_URL`, `DEST_BUNDLE`, `DEST_SKILLS` and `DEST_AGENTS`
+override the locations.
+
+Manual alternative, from a clone of the repo:
+
+```sh
+git clone https://github.com/edawise/deccy-agent.git
+cd deccy-agent
+./claude/link.sh                    # global: ~/.claude/skills and ~/.claude/agents
+./claude/link.sh --project <dir>    # <dir>/.claude/skills and <dir>/.claude/agents
+./claude/link.sh --list             # show the links and their targets
+./claude/link.sh --uninstall        # remove only symlinks into this bundle
+```
+
 `link.sh` symlinks only; it never copies and never replaces anything it did not create. Re-running
-it after an edit to `agents/*.md` is unnecessary — the links point into this repo.
+it after an edit to `claude/agents/*.md` is unnecessary — the links point into this repo.
 
 ```sh
 ./claude/link.sh                    # global: ~/.claude/skills and ~/.claude/agents
@@ -146,7 +167,7 @@ Do **not** point the plan directory at `.claude/` or `~/.claude/`. Those are pro
 there are never auto-approved, and `permissions.allow` rules are explicitly ignored for them. That is
 why the approved plan lives at `~/.local/share/deccy/agent/plan/`.
 
-## How enforcement differs from the root bundle
+## How enforcement differs from the OpenCode integration
 
 | Layer | Mechanism | Strength |
 |---|---|---|
@@ -157,9 +178,9 @@ why the approved plan lives at `~/.local/share/deccy/agent/plan/`.
 | Per-role write scope (`~/.local/share/deccy/agent/...`) | protocol prose plus an `Edit(...)` **allow** rule | **Advisory.** An allow rule pre-approves; it does not confine. Only the missing tools are confinement. |
 | Bash surface (no `jj` surgery, no direct `jj abandon`, no `rm`) | prose, plus best-effort `Bash(...)` rules if you add them | **Best-effort.** Deny rules do not match an absolute path, `sh -c`, or `git -C`; they are a speed bump, not a boundary. |
 
-The root bundle expresses the same intent as per-resource permission manifests that a subagent
-cannot escape. Claude Code has no per-subagent permission file, so anything finer than the tool set
-is either a session-wide rule or a sentence the agent is expected to obey. Read the "hard" rows as
+The OpenCode integration expresses the same intent as per-resource permission manifests that a
+subagent cannot escape. Claude Code has no per-subagent permission file, so anything finer than the
+tool set is either a session-wide rule or a sentence the agent is expected to obey. Read the "hard" rows as
 the contract and the "advisory" rows as the protocol; do not assume a drafter is physically unable
 to write outside its workspace.
 
@@ -168,7 +189,7 @@ to write outside its workspace.
 - **Subagent cwd.** The Task tool has no `cwd` parameter; a subagent inherits the primary session's
   working directory, and a `cd` inside a Bash call does not persist. The protocol therefore passes
   absolute workspace paths and instructs every role to `cd` for each shell command. That is the same
-  limitation the root bundle documents, not a new one.
+  limitation the bundle's README documents, not a new one.
 - **Protected paths.** `.claude/` and `~/.claude/` are protected: writes to them are never
   auto-approved, allow rules are ignored, and a symlink that resolves into them is no way around it.
   Round state and the approved plan live under `~/.local/share/deccy/agent/` instead.
@@ -176,8 +197,9 @@ to write outside its workspace.
   Claude Code neither advertises nor auto-loads them; each body names the `SKILL.md` paths to read.
   The trade-off is deliberate: the skill text enters context only when a role asks for it, which also
   means a role that skips step 1 is not prompted to fix that.
-- **Bodies are adapted copies.** `claude/agents/*.md` are ports of `agents/*.md`, not the same file.
-  Keep the protocol text, stop conditions and report formats in sync when the root agents change.
+- **Bodies are adapted copies.** `claude/agents/*.md` are ports of `opencode/agents/*.md`, not the
+  same file. Keep the protocol text, stop conditions and report formats in sync when the OpenCode
+  agents change.
 - **No per-subagent permission widening.** Claude Code subagents inherit the session's rules; there
   is no way to give `deccy-drafter` a Bash allow list that the orchestrator session does not also
   hold.
@@ -186,15 +208,16 @@ to write outside its workspace.
 
 ## Known shared-file touches
 
-Two shared files were changed for this port; both are inert for the root bundle's behaviour.
+Two shared files were changed for this port; both are inert for the OpenCode integration's
+behaviour.
 
 - **`skills/*/SKILL.md` (five files)** — `name` is now the kebab-case directory name
   (`deccy-core`, `deccy-round`, `deccy-author`, `deccy-gate`, `deccy-judge`), which Claude Code's
   validators require, and each adds `disable-model-invocation: true`. The `metadata:` block that
-  stops the root bundle from auto-invoking the same skill is kept (Claude Code ignores unknown
-  fields). Descriptions and bodies are unchanged.
+  stops the OpenCode integration from auto-invoking the same skill is kept (Claude Code ignores
+  unknown fields). Descriptions and bodies are unchanged.
 - **`skills/deccy-round/references/round-protocol.md`** — the two script invocations
   (`abandon-empty-heads.sh`, `delete-round-state.sh`) no longer hardcode one install root; they use
-  a `<deccy-round-skill-dir>` placeholder explained on the spot as the root bundle's skill
-  directory, `~/.claude/skills/deccy-round` here, or `<project>/.claude/skills/deccy-round` for a
-  per-project link.
+  a `<deccy-round-skill-dir>` placeholder explained on the spot as the bundle's skill directory,
+  `~/.claude/skills/deccy-round` here, or `<project>/.claude/skills/deccy-round` for a per-project
+  link.
