@@ -103,10 +103,10 @@ Follow `references/round-protocol.md` in the `deccy-round` skill directory read 
    paths, deviations and residual risks. Ask the user to approve the result.
 9. **Delete the ledger.** After the user approves the close report, run
    `~/.claude/skills/deccy-round/scripts/delete-round-state.sh <round>`. It removes
-   `rounds/<round>/ROUND.md` and the empty round directory. Remove `map.tsv` from the same
-   directory before the delete, or the directory is kept. The ledger is live work state, not audit;
-   do not retain it. The close report is the durable record. A nonzero exit is a stop: report it
-   and ask rather than leaving a half-deleted round.
+   `rounds/<round>/ROUND.md`, `rounds/<round>/map.tsv`, and the empty round directory. Never remove
+   those files manually; the guard denies it and the script is the only delete path. The ledger is
+   live work state, not audit; do not retain it. The close report is the durable record. A nonzero
+   exit is a stop: report it and ask rather than leaving a half-deleted round.
 
 ## Subagent packets
 
