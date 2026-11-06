@@ -70,12 +70,19 @@ ORCHESTRATOR_SHELL = (
     + [(D, f"{c} *") for c in ("rm", "mv", "cp", "tee", "dd", "truncate", "chmod", "chown")]
 )
 
-AUTHOR_SHELL = (  # gate author and drafter share one list
+AUTHOR_BASE = (  # gate author and drafter share this list
     GRAPH_WRITES
     + [(D, f"jj {v} *") for v in ("new", "squash", "rebase", "describe", "op", "split", "metaedit",
                                   "abandon", "undo", "restore")]
     + [(D, "jj workspace add *"), (D, "jj workspace forget *"), (D, "jj workspace update-stale *")]
     + [(D, "git add *"), (D, "git commit *"), (D, "git reset *")]
+    + [(A, "jj workspace update-stale *")]  # the protocol instructs it; last match wins
+)
+
+GATE_AUTHOR_SHELL = AUTHOR_BASE
+
+DRAFTER_SHELL = AUTHOR_BASE + (  # a refine restores gate paths into its draft for running
+    [(A, "jj restore --from * --to @ -- *"), (A, "jj restore --from * --into @ -- *")]
 )
 
 JUDGE_SHELL = (
@@ -106,13 +113,13 @@ def policies() -> dict:
             "skills": {"deccy-core", "deccy-gate"},
             "agents": set(),
             "writes": [f"{root}/workspaces/drafts/**"],
-            "shell": AUTHOR_SHELL,
+            "shell": GATE_AUTHOR_SHELL,
         },
         "deccy-drafter": {
             "skills": {"deccy-core", "deccy-author"},
             "agents": set(),
             "writes": [f"{root}/workspaces/drafts/**"],
-            "shell": AUTHOR_SHELL,
+            "shell": DRAFTER_SHELL,
         },
         "deccy-judge": {
             "skills": {"deccy-core", "deccy-judge"},

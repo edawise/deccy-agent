@@ -91,7 +91,7 @@ permissions:
     effect: deny
   - action: shell
     resource: "jj workspace update-stale *"
-    effect: deny
+    effect: allow
   - action: shell
     resource: "git add *"
     effect: deny

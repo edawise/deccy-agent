@@ -137,15 +137,24 @@ class Drafter(Base):
         self.assertBlocked(self.run_tool(self.R, "Write", file_path="/etc/x"))
 
     def test_shell(self):
-        for c in ("cd /w && pytest -q", "jj diff --summary -r @", "jj st", "rm build/x"):
+        for c in ("cd /w && pytest -q", "jj diff --summary -r @", "jj st", "rm build/x",
+                  "jj workspace update-stale", "cd /w && jj workspace update-stale",
+                  "jj restore --from a --to @ -- x", "jj restore --from g --into @ -- y"):
             self.assertAllowed(self.bash(self.R, c))
-        for c in ("jj new", "jj restore --from a --to @ -- x", "deccy record x",
-                  "jj workspace update-stale", "git commit -m x"):
+        for c in ("jj new", "jj restore src/a.py", "deccy record x", "git commit -m x"):
             self.assertBlocked(self.bash(self.R, c))
 
 
 class GateAuthor(Drafter):
     R = "deccy-gate-author"
+
+    def test_shell(self):
+        # gate author: update-stale allowed (instructed), restore stays denied (never needed)
+        for c in ("cd /w && pytest -q", "jj st", "jj workspace update-stale"):
+            self.assertAllowed(self.bash(self.R, c))
+        for c in ("jj new", "jj restore --from a --to @ -- x", "jj restore src/a.py",
+                  "deccy record x", "git commit -m x"):
+            self.assertBlocked(self.bash(self.R, c))
 
 
 class Judge(Base):

@@ -84,6 +84,12 @@ permissions:
     resource: "jj restore *"
     effect: deny
   - action: shell
+    resource: "jj restore --from * --to @ -- *"
+    effect: allow
+  - action: shell
+    resource: "jj restore --from * --into @ -- *"
+    effect: allow
+  - action: shell
     resource: "jj workspace add *"
     effect: deny
   - action: shell
@@ -91,7 +97,7 @@ permissions:
     effect: deny
   - action: shell
     resource: "jj workspace update-stale *"
-    effect: deny
+    effect: allow
   - action: shell
     resource: "git add *"
     effect: deny
@@ -153,9 +159,9 @@ paths; never edit the repo working copy. Do not inspect another alternative’s 
 - No new node for a refine: a refine edits the existing target and may add the `depends_on` edge the
   plan names. If the change needs a different commitment or a new node, stop and ask for a `new`
   unit.
-- No jj surgery: no `new`, `squash`, `rebase`, `describe`, `restore`, `abandon`, `op`, `split`,
-  `metaedit`, no workspace add/forget. Read-only jj only, plus `jj workspace update-stale` to
-  refresh your own workspace after another component records.
+- No jj surgery: no `new`, `squash`, `rebase`, `describe`, `abandon`, `op`, `split`, `metaedit`,
+  no `restore` outside the `--from <id> --to @` form, no workspace add/forget. Read-only jj plus
+  `jj workspace update-stale` to refresh your own workspace after another component records.
 - No trunk edits; your authority is the workspace.
 - No custody violations: another node’s `ref` file, another node JSON, or a path outside the unit’s
   write set is not yours.
