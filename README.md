@@ -176,9 +176,11 @@ curl -fsSL https://raw.githubusercontent.com/edawise/deccy-agent/main/codex/inst
 ```
 
 Each installer clones the bundle to `~/.local/share/deccy/agent/bundle` (shared by all three
-integrations) and runs that folder's `link.sh`. Options: `--project <dir>` for a project-local
-install, `--ref <branch|tag>`, `--from <dir>` to use an existing checkout in place, `--list`,
-`--uninstall`, and `--purge` (also removes the bundle clone once no links into it remain).
+integrations) and runs that folder's `link.sh`. The Codex integration requires Codex CLI `0.167.0`
+or newer and `install.sh` refuses an older release; see [`codex/README.md`](codex/README.md) for the
+trust step and upgrade notes. Options: `--project <dir>` for a project-local install,
+`--ref <branch|tag>`, `--from <dir>` to use an existing checkout in place, `--list`, `--uninstall`,
+and `--purge` (also removes the bundle clone once no links into it remain).
 `REPO_URL`, `DEST_BUNDLE`, `DEST_SKILLS` and `DEST_AGENTS` override the default locations; the
 Codex `link.sh` also accepts `DEST_HOOKS` and `DEST_BIN`.
 
@@ -220,7 +222,12 @@ nodes).
   sandboxing.
 - **Codex hook trust.** Codex runs non-managed hooks only after `/hooks` trust, and a project
   `.codex/` layer must also be trusted. Without that trust only the role prompts enforce the
-  boundaries.
+  boundaries. Automation needs `--dangerously-bypass-hook-trust`; see
+  [`codex/README.md`](codex/README.md#hook-trust-hooks).
+- **Codex version.** The Codex port targets CLI `0.167.0` and newer. Hook payloads, tool names and
+  V2 spawn arguments are not a stable public API, so an upgrade can silently break the guard or the
+  registration handshake. Re-run the guard tests and a one-unit fixture round after upgrading, and
+  see [`codex/README.md`](codex/README.md#upgrading-codex).
 - **Refine units.** A refine draft is based at the existing target and restores the gate paths for
   running. The landable set is the draft diff minus those paths; the orchestrator must subtract
   them and never record them into the target. If the refine adds a new `ref`, the node JSON is
@@ -258,3 +265,7 @@ nodes).
 - **Empty heads after forget.** `jj workspace forget` can leave an empty head (observed in a past
   round). The orchestrator now runs the verified `abandon-empty-heads.sh` at close; a
   remaining non-empty or bookmarked head still stops the round for a human decision.
+- **Empty internal changes.** A restack can leave a described or undescribed empty change below the
+  tip. It is harmless: `set-round-tip.sh` moves `@` above the highest landed node change, and close
+  requires one head, not zero empty internal changes. Do not rebase or abandon it just to make the
+  log look shorter.

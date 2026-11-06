@@ -48,6 +48,22 @@ if [ "$MODE" = install ]; then
     echo "install Codex CLI first: https://developers.openai.com/codex" >&2
     exit 1
   }
+  MIN_CODEX=0.167.0
+  CODEX_VERSION=$(codex --version 2>/dev/null | awk 'NF {print $NF; exit}')
+  if ! awk -v have="${CODEX_VERSION:-0}" -v min="$MIN_CODEX" 'BEGIN {
+      n = split(have, a, ".")
+      m = split(min, b, ".")
+      if (n < m) n = m
+      for (i = 1; i <= n; i++) {
+        if (a[i] + 0 > b[i] + 0) exit 0
+        if (a[i] + 0 < b[i] + 0) exit 1
+      }
+      exit 0
+    }'; then
+    echo "Codex CLI $MIN_CODEX or newer is required (found: ${CODEX_VERSION:-unknown})" >&2
+    echo "upgrade with: codex update" >&2
+    exit 1
+  fi
   command -v jj >/dev/null 2>&1 || echo "warning: jj not found on PATH; deccy rounds need it" >&2
   command -v deccy >/dev/null 2>&1 || echo "warning: deccy not found on PATH; graph writes need it" >&2
 fi

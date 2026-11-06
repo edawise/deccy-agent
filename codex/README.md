@@ -4,6 +4,15 @@ Codex-specific paths, invocation, role routing and guard enforcement for the dec
 See the root [`README.md`](../README.md) for the shared round protocol, roles, installer options
 and limitations.
 
+## Requirements
+
+- **Codex CLI 0.167.0 or newer.** The bundle is tested at `0.167.0`; `codex/install.sh` refuses an
+  older release. See [Upgrading Codex](#upgrading-codex) before moving to a newer one.
+- `python3` for the guard hook, the `hooks.json` helper and the deccy check scripts.
+- `jj` for draft workspaces and graph changes, and `deccy` for graph writes. Both are checked when
+  a role starts and produce a warning if missing.
+- `git` for the installer's clone; an existing `--from` checkout does not need it.
+
 ## Paths & verify
 
 `codex/link.sh` (and `codex/install.sh`) symlinks the five shared skills, links the `deccy-codex`
@@ -19,17 +28,40 @@ launcher and registers `codex/hooks/deccy-guard.py` as a `PreToolUse` hook (mark
 The hook helper (`codex/hooks/settings-hook.py`) edits only its own hook entry, refuses invalid
 JSON, and writes through a symlinked `hooks.json` rather than replacing it.
 
-Codex loads non-managed hooks only after they are reviewed and trusted. Open `/hooks` in a session
-and trust the deccy entry before the first round. Project hooks load only when the project `.codex/`
-layer is trusted.
+Codex loads non-managed hooks only after they are reviewed and trusted; see
+[Hook trust](#hook-trust-hooks) before the first round.
 
-Verify the links and the hook:
+Verify the links:
 
 ```sh
 ls -la ~/.agents/skills/deccy-*
 ./codex/link.sh --list
-# then /hooks inside a Codex session
 ```
+
+## Hook trust (`/hooks`)
+
+`link.sh` writes the guard into `hooks.json`, but Codex does not run a non-managed hook until you
+review and trust it. Trust belongs to that `hooks.json` file, so it follows the target you linked.
+
+1. Install or link the bundle, then start Codex from the graph repository root (the launcher is
+   optional for this step; plain `codex` is enough).
+2. Run `/hooks` and open the `PreToolUse` entry whose command ends with
+   `# deccy-agent-codex-guard`.
+3. Review the command and trust it. It runs `python3 <bundle>/codex/hooks/deccy-guard.py`; confirm
+   the path is a bundle you control.
+4. For a project install, trust the project `.codex/` layer as well. A global `/hooks` trust does
+   not cover a project hooks file, and a project trust does not cover the global file.
+5. Re-trust after reinstalling or linking to a different bundle, and whenever Codex reports the hook
+   as untrusted or changed. Editing `hooks.json` invalidates the previous trust decision.
+
+Check that the hook is live: ask the agent for a shell command or edit the guard should deny, for
+example a write outside the role's scope. A denied call exits `2` and shows the guard's message. If
+the call runs, the hook is untrusted and only the role prompt is enforcing the boundary.
+
+Automation and disposable fixtures may pass `--dangerously-bypass-hook-trust` to `codex` (or through
+`deccy-codex ... exec`). It skips the persisted trust check for that invocation only; do not put it
+in an alias or use it for a normal session. Every bypass is a decision that you have vetted the hook
+source yourself.
 
 ## Run
 
@@ -94,7 +126,35 @@ Run the guard and hook tests with:
 python3 -m unittest discover -s codex/hooks
 ```
 
-Codex-specific caveats:
+## Upgrading Codex
+
+Codex's hook payload, tool names and V2 spawn arguments are not a stable public API. The bundle is
+tested at `0.167.0`; a newer CLI can change any surface the guard matches.
+
+After `codex update` (or a package upgrade):
+
+1. Run `codex --version` and confirm it is still `0.167.0` or newer.
+2. Re-run the hook tests:
+
+   ```sh
+   python3 -m unittest discover -s codex/hooks
+   ```
+
+3. Open `/hooks`, re-trust the guard if Codex reports it changed, and confirm a denied call still
+   exits `2` with the guard's message.
+4. Check the surfaces the port depends on:
+   - shell calls arrive as `Bash`;
+   - edits arrive as `apply_patch` with `*** Begin Patch`, `*** Add File:`, `*** Update File:`,
+     `*** Delete File:` and `*** Move to:`;
+   - spawning arrives as `collaborationspawn_agent` with `tool_input.task_name`;
+   - `spawn_agent` accepts `task_name`, `message`, `fork_turns`, `model` and `reasoning_effort`;
+   - child calls expose `agent_id`, and the registration handshake still binds it.
+5. Run a one-unit fixture round before a real round.
+
+When a surface moves, update the guard, `codex/hooks/test_deccy_guard.py`, the role prompts and the
+tables in this README in one change so the pinned version and the tests stay honest.
+
+## Codex-specific caveats
 
 - **Guard, not sandbox.** Subagents inherit the parent's sandbox and filesystem access. The guard
   scopes writes and shell commands; it does not create a per-role filesystem or permission
@@ -107,4 +167,5 @@ Codex-specific caveats:
 - **Spawned children inherit `DECCY_ROLE`.** The guard never trusts that inherited value for a
   child; it resolves the child's role from the registration map.
 - **Hook trust.** Without `/hooks` trust (or `--dangerously-bypass-hook-trust`), Codex does not run
-  the deccy hook and only the prompts enforce the role boundaries.
+  the deccy hook and only the prompts enforce the role boundaries; see
+  [Hook trust](#hook-trust-hooks).
