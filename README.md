@@ -26,26 +26,21 @@ The bundle:
 | `deccy-gate` | gate author | evaluation design, eval matrix, red/green, freeze |
 | `deccy-judge` | judge | clean-room base-red/candidate-green, gate integrity, counterexamples, gate-strength advisory |
 
-All five set `opencode/autoinvoke: false`; the agent prompts load exactly the skills they need.
-
-## Layout
-
-`skills/` is shared at the root. `opencode/` and `claude/` are self-contained integrations — each
-has its own agents, `link.sh`, `install.sh` and README. Both link into their tool's discovery
-paths instead of copying, so updating a checkout (or the installer's clone, with `git pull`) is
-enough; the links stay live.
+All five set `opencode/autoinvoke: false` and `disable-model-invocation: true`; the agent prompts
+load the skills they need.
 
 ## Agents
 
-| ID | Use |
-|---|---|
-| `deccy-plan` | produce one layer plan (breadth only); read-only |
-| `deccy-orchestrator` | run the round; only graph writer |
-| `deccy-gate-author` | write one evaluation + red test |
-| `deccy-drafter` | implement one decision |
-| `deccy-judge` | judge a candidate |
+| ID | Mode | Use |
+|---|---|---|
+| `deccy-plan` | all | produce one layer plan (breadth only); read-only |
+| `deccy-orchestrator` | all | run the round; only graph writer |
+| `deccy-gate-author` | subagent | write one evaluation + red test |
+| `deccy-drafter` | subagent | implement one decision |
+| `deccy-judge` | subagent | judge a candidate |
 
-Start with `deccy-plan` to get a layer plan, then `deccy-orchestrator` to execute it. The
+Start with `deccy-plan` to get a layer plan, then `deccy-orchestrator` to execute it (or start
+`deccy-orchestrator` directly and let it spawn `deccy-plan`). The
 orchestrator launches the other three roles. The plan’s separate prose/alternatives **reviewer**
 is deliberately not a role yet; the judge checks correctness and the orchestrator/user review the
 prose after the verdict. Add it once the round is stable.
@@ -108,7 +103,7 @@ jj workspace add "$WS" --name "deccy-<round>-<component>-<handle>" -r <base-chan
 ```
 
 The root is fixed because the agents’ edit permissions are scoped to it. Moving it
-requires editing those permissions in `opencode/agents/`.
+requires editing those permissions in `opencode/agents/` and `claude/hooks/deccy-guard.py`.
 
 The workspace’s `@` is the draft. Edit in place; never run `jj new` inside it. Run jj from inside
 the workspace (`cd "$WS" && jj ...`), not with `-R` from the trunk.
@@ -159,6 +154,9 @@ See `skills/deccy-round/references/jj-direct.md` for the allowed/forbidden surfa
 
 ## Install
 
+`skills/` is shared at the root; `opencode/` and `claude/` each have their own `agents/`,
+`install.sh` and `link.sh`.
+
 ```sh
 # OpenCode
 curl -fsSL https://raw.githubusercontent.com/edawise/deccy-agent/main/opencode/install.sh | sh
@@ -166,20 +164,40 @@ curl -fsSL https://raw.githubusercontent.com/edawise/deccy-agent/main/opencode/i
 curl -fsSL https://raw.githubusercontent.com/edawise/deccy-agent/main/claude/install.sh | sh
 ```
 
-Each installer clones the bundle once (`~/.local/share/deccy/agent/bundle`, shared by both) and
-runs that folder's `link.sh`; the Claude installer also drops a `deccy-claude` launcher into
-`~/.local/bin` (`deccy-claude plan` / `deccy-claude orchestrator`). See `opencode/README.md` and
-`claude/README.md` for per-project installs, session profiles and enforcement notes.
+Each installer clones the bundle to `~/.local/share/deccy/agent/bundle` (shared by both
+integrations) and runs that folder's `link.sh`. Options: `--project <dir>` for a project-local
+install, `--ref <branch|tag>`, `--from <dir>` to use an existing checkout in place, `--list`,
+`--uninstall`, and `--purge` (also removes the bundle clone once no links into it remain).
+`REPO_URL`, `DEST_BUNDLE`, `DEST_SKILLS` and `DEST_AGENTS` override the default locations.
+
+From a local clone, run `link.sh` directly (`<tool>` is `opencode` or `claude`):
+
+```sh
+./<tool>/link.sh                        # global install
+./<tool>/link.sh --project <dir>        # project-local install
+./<tool>/link.sh --list                 # show the links and their targets
+./<tool>/link.sh --uninstall            # remove only symlinks into this bundle
+```
+
+`link.sh` symlinks the five skill directories from `skills/` and the five agent files from
+`<tool>/agents/`; it never copies and refuses to replace files or links it did not create, so
+`git pull` updates stay live without re-linking. The Claude `link.sh` also registers (and with
+`--uninstall` removes) the guard hook in Claude Code's settings; see `claude/README.md`. For `--project` in a jj-managed repository, add
+`.opencode/` or `.claude/` to `.gitignore` before linking so jj does not snapshot and clean up the
+symlinks during round operations (or use the global install).
+
+See [`opencode/README.md`](opencode/README.md) and [`claude/README.md`](claude/README.md) for
+tool-specific paths, invocation, session setup and enforcement.
 
 Use a fixture repository first. This bundle has not been hardened against a large graph (hundreds of
 nodes).
 
 ## Current limitations
 
-- **Subagent cwd.** OpenCode’s built-in `subagent` tool has no `cwd` parameter; children inherit
-  the parent session’s directory. The role prompts therefore require absolute workspace paths and
-  `cd` for shell commands, and the edit permissions are scoped to the draft/judge roots. A bridge
-  plugin or `opencode run` in the workspace is the next step.
+- **Subagent cwd.** Neither OpenCode’s `subagent` tool nor Claude Code’s `Agent` tool has a `cwd`
+  parameter; children inherit the parent session’s directory. Launch primary sessions from the
+  graph repository root; the role prompts require absolute workspace paths and `cd` for shell
+  commands, and the edit permissions are scoped to the draft/judge roots.
 - **Refine units.** A refine draft is based at the existing target and restores the gate paths for
   running. The landable set is the draft diff minus those paths; the orchestrator must subtract
   them and never record them into the target. If the refine adds a new `ref`, the node JSON is

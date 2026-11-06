@@ -22,14 +22,14 @@ class Base(unittest.TestCase):
         os.environ.pop("DECCY_GUARD_ROOT", None)
         self.tmp.cleanup()
 
-    def run_tool(self, role, tool, main_role=None, **tool_input):
+    def run_tool(self, role, tool, **tool_input):
         event = {"tool_name": tool, "tool_input": tool_input, "cwd": self.root}
         if role:
             event["agent_type"] = role
-        return guard.decide(event, main_role)
+        return guard.decide(event)
 
-    def bash(self, role, cmd, main_role=None):
-        return self.run_tool(role, "Bash", main_role, command=cmd)
+    def bash(self, role, cmd):
+        return self.run_tool(role, "Bash", command=cmd)
 
     def assertAllowed(self, reason):
         self.assertIsNone(reason)
@@ -43,18 +43,27 @@ class RoleResolution(Base):
         self.assertAllowed(self.bash(None, "rm -rf x"))
         self.assertAllowed(self.bash("general-purpose", "rm -rf x"))
 
-    def test_main_role_from_run_sh(self):
-        self.assertBlocked(self.bash(None, "rm x", main_role="deccy-plan"))
-        self.assertAllowed(self.bash(None, "jj log", main_role="deccy-plan"))
+    def test_role_comes_from_agent_type(self):
+        # `claude --agent deccy-plan` main session and a deccy-plan subagent look the same
+        self.assertBlocked(self.bash("deccy-plan", "rm x"))
+        self.assertAllowed(self.bash("deccy-plan", "jj log"))
+        self.assertBlocked(self.bash("deccy-drafter", "deccy new x"))
+        self.assertAllowed(self.bash("deccy-orchestrator", "deccy new x"))
 
-    def test_agent_type_wins_over_main_role(self):
-        # a drafter spawned from an orchestrator session uses the drafter rules
-        self.assertBlocked(self.bash("deccy-drafter", "deccy new x", main_role="deccy-orchestrator"))
-        self.assertAllowed(self.bash(None, "deccy new x", main_role="deccy-orchestrator"))
-
-    def test_foreign_agent_in_deccy_session_reads_only(self):
-        self.assertBlocked(self.bash("general-purpose", "ls", main_role="deccy-orchestrator"))
-        self.assertAllowed(self.run_tool("Explore", "Read", "deccy-orchestrator", file_path="/x"))
+    def test_main_entry_point(self):
+        import io, json, sys
+        def run(stdin):
+            old = sys.stdin
+            sys.stdin = io.StringIO(stdin)
+            try:
+                return guard.main()
+            finally:
+                sys.stdin = old
+        self.assertEqual(run("not json"), 0)  # unidentifiable: never block
+        self.assertEqual(run("[]"), 0)
+        self.assertEqual(run(json.dumps({"tool_name": "Bash", "tool_input": {"command": "rm x"}})), 0)
+        blocked = {"agent_type": "deccy-plan", "tool_name": "Bash", "tool_input": {"command": "rm x"}}
+        self.assertEqual(run(json.dumps(blocked)), 2)
 
 
 class Plan(Base):

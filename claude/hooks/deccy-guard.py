@@ -16,9 +16,10 @@ too. Leading env assignments, a path on the program name, the wrappers `env`, `c
 `time`, `nice`, `timeout <n>` and `xargs [flags]`, and jj/git global options (`-R`, `-C`, ...) are
 stripped before matching, so they do not slip a denied verb past the rule.
 
-Role: the caller's `agent_type` when it is one of the five deccy roles; otherwise the session's
-main role from `--main-role` (run.sh passes it). A non-deccy agent inside a deccy session may
-only read. Outside a deccy session (no main role, non-deccy caller) everything is allowed.
+Role: the caller's `agent_type` — set both for a `claude --agent deccy-<role>` main session and for
+a deccy subagent. Any other caller (a plain session, a non-deccy agent) is allowed untouched, so the
+hook is safe to register globally; link.sh does that. Unreadable input is allowed for the same
+reason: the guard cannot tell whose call it is.
 
 Exit 0 allows; exit 2 blocks with the reason on stderr (Claude Code shows it to the model). This is
 a guard, not a sandbox: a determined shell can still write a file the patterns do not anticipate.
@@ -132,8 +133,6 @@ def policies() -> dict:
 
 WRITE_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 AGENT_TOOLS = {"Agent", "Task"}
-READ_ONLY_TOOLS = {"Read", "Glob", "Grep", "LS", "TodoWrite", "TaskCreate", "TaskUpdate", "TaskList",
-                   "TaskGet", "AskUserQuestion", "ToolSearch"}
 
 
 # --- shell parsing ---------------------------------------------------------------------------------
@@ -308,26 +307,14 @@ def path_allowed(path: str, cwd: str, globs: list[str]) -> bool:
 
 # --- decision --------------------------------------------------------------------------------------
 
-def decide(event: dict, main_role: str | None) -> str | None:
+def decide(event: dict) -> str | None:
     """Return a block reason, or None to allow."""
-    agent_type = event.get("agent_type")
-    if agent_type in ROLES:
-        role = agent_type
-    elif agent_type and main_role:
-        role = "foreign"  # a non-deccy agent inside a deccy session
-    elif main_role in ROLES:
-        role = main_role
-    else:
+    role = event.get("agent_type")
+    if role not in ROLES:
         return None
     tool = event.get("tool_name", "")
     args = event.get("tool_input") or {}
     cwd = event.get("cwd") or ""
-
-    if role == "foreign":
-        if tool in READ_ONLY_TOOLS:
-            return None
-        return (f"deccy guard: agent type `{agent_type}` is not a deccy role; inside a deccy session it "
-                f"may only read.")
 
     pol = policies()[role]
 
@@ -366,20 +353,14 @@ def decide(event: dict, main_role: str | None) -> str | None:
     return None
 
 
-def main(argv: list[str]) -> int:
-    main_role = None
-    if "--main-role" in argv:
-        i = argv.index("--main-role")
-        if i + 1 < len(argv):
-            main_role = argv[i + 1]
-            if not main_role.startswith("deccy-"):
-                main_role = "deccy-" + main_role
+def main() -> int:
     try:
         event = json.load(sys.stdin)
-    except (ValueError, OSError) as e:
-        print(f"deccy guard: unreadable hook input ({e}); blocking.", file=sys.stderr)
-        return 2
-    reason = decide(event, main_role)
+    except (ValueError, OSError):
+        return 0  # global hook: never block a session we cannot identify
+    if not isinstance(event, dict):
+        return 0
+    reason = decide(event)
     if reason:
         print(reason, file=sys.stderr)
         return 2
@@ -387,4 +368,4 @@ def main(argv: list[str]) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    sys.exit(main())

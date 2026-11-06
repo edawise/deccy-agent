@@ -1,31 +1,29 @@
 #!/bin/sh
 # Install the deccy-agent Claude Code bundle from GitHub.
 #
-# Clones the bundle (or reuses a checkout given with --from), runs
+# Clones the bundle (or reuses a checkout given with --from) and runs
 # claude/link.sh, which symlinks the five skills and five agents into
-# Claude Code's discovery paths, and installs a `deccy-claude` launcher
-# into DEST_BIN so `deccy-claude plan` / `deccy-claude orchestrator` work
-# from any directory.
+# Claude Code's discovery paths and registers the deccy guard hook in
+# Claude Code's settings. Then: `claude --agent deccy-plan` /
+# `claude --agent deccy-orchestrator`.
 #
 # Usage:
 #   ./install.sh                        # global install (default)
 #   ./install.sh --project <dir>        # project-local links into <dir>/.claude
 #   ./install.sh --ref <branch|tag>     # install a specific ref (default: main)
 #   ./install.sh --from <dir>           # use an existing checkout in place
-#   ./install.sh --uninstall            # remove the links and the launcher
+#   ./install.sh --uninstall            # remove the links and the guard hook
 #   ./install.sh --purge                # also remove the bundle clone
-#   ./install.sh --list                 # show the links, launcher and targets
+#   ./install.sh --list                 # show the links, targets and the guard hook
 #
 # Env overrides:
 #   REPO_URL     GitHub repo (default: https://github.com/edawise/deccy-agent.git)
 #   DEST_BUNDLE  bundle clone (default: ~/.local/share/deccy/agent/bundle)
-#   DEST_BIN     launcher directory (default: ~/.local/bin)
-#   DEST_SKILLS / DEST_AGENTS  link destinations passed to link.sh
+#   DEST_SKILLS / DEST_AGENTS / DEST_SETTINGS  destinations passed to link.sh
 set -eu
 
 REPO_URL="${REPO_URL:-https://github.com/edawise/deccy-agent.git}"
 DEST_BUNDLE="${DEST_BUNDLE:-$HOME/.local/share/deccy/agent/bundle}"
-DEST_BIN="${DEST_BIN:-$HOME/.local/bin}"
 REF=main
 PROJECT_DIR=""
 FROM=""
@@ -39,7 +37,7 @@ while [ $# -gt 0 ]; do
     --uninstall) MODE=uninstall; shift;;
     --purge) MODE=purge; shift;;
     --list) MODE=list; shift;;
-    -h|--help) sed -n '2,23p' "$0"; exit 0;;
+    -h|--help) sed -n '2,22p' "$0"; exit 0;;
     *) echo "unknown option: $1 (see --help)" >&2; exit 1;;
   esac
 done
@@ -63,7 +61,6 @@ else
   BUNDLE=$DEST_BUNDLE
 fi
 LINK="$BUNDLE/claude/link.sh"
-LAUNCHER="$DEST_BIN/deccy-claude"
 
 if [ -n "$FROM" ] && [ ! -f "$LINK" ]; then
   echo "--from: $BUNDLE does not look like a deccy-agent checkout (no claude/link.sh)" >&2
@@ -126,64 +123,12 @@ check_blockers() {
   add_blockers "${DEST_AGENTS:-}"
 }
 
-# --- launcher -------------------------------------------------------------
-
-launcher_is_ours() {
-  [ -f "$LAUNCHER" ] || return 1
-  grep -q '^# deccy-agent claude launcher' "$LAUNCHER" 2>/dev/null || return 1
-  grep -qF "exec \"$BUNDLE/claude/run.sh\"" "$LAUNCHER" 2>/dev/null
-}
-
-launcher_status() {
-  if [ -f "$LAUNCHER" ] && launcher_is_ours; then
-    echo "$LAUNCHER -> $BUNDLE/claude/run.sh"
-  elif [ -e "$LAUNCHER" ] || [ -L "$LAUNCHER" ]; then
-    echo "$LAUNCHER (exists, not owned by this bundle)"
-  else
-    echo "$LAUNCHER (not installed)"
-  fi
-}
-
-install_launcher() {
-  if [ -e "$LAUNCHER" ] || [ -L "$LAUNCHER" ]; then
-    if launcher_is_ours; then
-      :  # ours; refresh it below
-    elif grep -q '^# deccy-agent claude launcher' "$LAUNCHER" 2>/dev/null; then
-      echo "refusing to replace $LAUNCHER (belongs to another deccy-agent checkout)" >&2
-      exit 1
-    else
-      echo "refusing to replace $LAUNCHER (exists and is not ours)" >&2
-      exit 1
-    fi
-  fi
-  mkdir -p "$DEST_BIN"
-  printf '%s\n' \
-    '#!/bin/sh' \
-    '# deccy-agent claude launcher' \
-    "exec \"$BUNDLE/claude/run.sh\" \"\$@\"" > "$LAUNCHER"
-  chmod +x "$LAUNCHER"
-  case ":$PATH:" in
-    *":$DEST_BIN:"*) ;;
-    *) echo "warning: $DEST_BIN is not on PATH; add it to use deccy-claude directly" >&2;;
-  esac
-  echo "installed launcher: $LAUNCHER  (deccy-claude plan | deccy-claude orchestrator)"
-}
-
-remove_launcher() {
-  if [ -f "$LAUNCHER" ] && launcher_is_ours; then
-    rm "$LAUNCHER"
-    echo "removed launcher $LAUNCHER"
-  fi
-}
-
 case "$MODE" in
   list)
     run_link --list
-    launcher_status
     ;;
   uninstall)
     run_link --uninstall
-    remove_launcher
     echo
     echo "bundle checkout: $BUNDLE"
     echo "it is shared by both integrations (opencode/ and claude/); it was not removed."
@@ -207,15 +152,14 @@ case "$MODE" in
       echo "uninstall them (the other integration's link.sh --uninstall), then re-run --purge" >&2
       exit 1
     fi
-    remove_launcher
     rm -rf "$BUNDLE"
     echo "removed $BUNDLE"
     ;;
   install)
     run_link
-    install_launcher
     echo
     echo "bundle checkout: $BUNDLE (shared by opencode/ and claude/)"
     echo "update later with:  git -C \"$BUNDLE\" pull"
+    echo "run:  claude --agent deccy-plan   |   claude --agent deccy-orchestrator"
     ;;
 esac
