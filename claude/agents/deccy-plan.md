@@ -73,8 +73,8 @@ needs their answer; as a subagent, put the question in your final message.
 - A row needs a decision outside the seeds or scope: report it as the next layer's seed.
 - Two rows describe one commitment: merge them.
 - A refine target carries a different commitment: split it into a `new` row.
-- A refine's new prerequisite does not already precede the target: stop; the round cannot rebase
-  the inversion.
+- A refine's new prerequisite does not already precede the target: stop; a refine must not plan an
+  inversion. The round restacks gate placement, not a refine edge.
 - A fork is unresolved and its dependants are required: stop.
 - The layer exceeds the bound after deduplication: split it.
 

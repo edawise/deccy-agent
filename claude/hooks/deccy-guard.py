@@ -60,7 +60,7 @@ PLAN_SHELL = (
 )
 
 ORCHESTRATOR_SHELL = (
-    [(D, "jj new -A *"), (D, "jj squash *"), (D, "jj rebase *"), (D, "jj describe *"),
+    [(D, "jj new -A *"), (D, "jj squash *"), (A, "jj rebase *"), (D, "jj describe *"),
      (A, "jj describe -m *"),
      (D, "jj op *"), (D, "jj split *"), (D, "jj metaedit *"), (D, "jj abandon *"), (D, "jj undo *"),
      (D, "jj restore *"),

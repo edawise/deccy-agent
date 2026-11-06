@@ -105,13 +105,14 @@ class Orchestrator(Base):
                   "jj restore --from abc --to @ -- src/a.py",
                   "printf '%s\\n' a b | xargs -r jj restore --from abc --to @ --",
                   "jj describe -m 'summary' abc",
+                  "jj rebase -s abc -B def",
                   "~/.claude/skills/deccy-round/scripts/abandon-empty-heads.sh --dry-run",
                   "/x/deccy-round/scripts/delete-round-state.sh r1",
                   "printf '%s\\t%s\\n' U2 \"$id\" >> \"$MAP\""):
             self.assertAllowed(self.bash(self.R, c))
 
     def test_surgery_blocked(self):
-        for c in ("jj new -A abc", "jj squash", "jj rebase -r a -B b", "jj describe abc",
+        for c in ("jj new -A abc", "jj squash", "jj describe abc",
                   "jj abandon abc", "jj op restore x", "jj restore src/a.py", "jj undo",
                   "deccy remove x", "deccy init", "git push", "rm -rf x", "mv a b",
                   "sh -c 'jj squash'", "xargs jj abandon"):

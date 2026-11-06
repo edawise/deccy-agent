@@ -62,7 +62,11 @@ Follow `references/round-protocol.md` in the `deccy-round` skill directory read 
    verify coverage and freeze the existing hash; do not edit it. For an **amended** gate, use the
    check-workspace rule. A refine that adds an edge must amend an evaluation or add one; a new
    evaluation also runs its red check in the target check workspace. A gate-author defect stops the
-   unit; a judge `gate-weak` advisory does not.
+   unit; a judge `gate-weak` advisory does not. Once every gate in the component is recorded and
+   frozen, run `check-topology.py` and restack every inversion with the printed
+   `jj rebase -s <prereq> -B <dependent>` before opening an implementation workspace. Then run
+   `~/.claude/skills/deccy-round/scripts/set-round-tip.sh` and re-check with the full tree; repeat
+   until a clean check with `@` at the tip. This is the one raw-jj history move you may make.
 5. **Implementations.** For a new unit, open implementation workspace(s) at the frozen evaluation.
    For a refine, open the workspace at the **existing target**, then restore the gate paths into it
    for running. Spawn the `deccy-drafter` subagent with the workspace path, mode, target, gate id
@@ -80,13 +84,15 @@ Follow `references/round-protocol.md` in the `deccy-round` skill directory read 
    `jj new <target>` -> `jj restore --from <draft> --to @ -- <landable-paths>` ->
    `deccy record <landable-paths> --to <target>`, then `jj workspace forget` every draft, including
    losers. For a refine, never land the gate paths; if a landable path is a new ref, record the node
-   JSON first, then the new path. Return the working copy to the target tip. Then refresh every
-   other open workspace and re-run its gate. If a gate result changes because another component
-   landed, stop: the components were not independent. Update the landed summary with
-   `jj describe -m "<summary>" <target>` (summary only; never node content or edges). Then abandon
+   JSON first, then the new path. Then refresh every other open workspace and re-run its gate. If a
+   gate result changes because another component landed, stop: the components were not independent.
+   Update the landed summary with `jj describe -m "<summary>" <target>` (summary only; never node
+   content or edges). After the last landing and workspace forget, run
+   `~/.claude/skills/deccy-round/scripts/set-round-tip.sh` so `@` is above the highest landed node
+   change — `jj new <target>` alone leaves the target's gate as a sibling head. Then abandon
    verified stray heads with
-   `~/.claude/skills/deccy-round/scripts/abandon-empty-heads.sh` (`--dry-run` first when unsure;
-   `--force-stray` only for a byte-identical gate-path restore). It still refuses the working copy,
+   `~/.claude/skills/deccy-round/scripts/abandon-empty-heads.sh --force-stray --force-superseded`
+   (`--dry-run` first when unsure). It still refuses the working copy,
    open workspaces, bookmarked or described heads, node changes, and any other non-empty diff;
    never run `jj abandon` directly. If it exits nonzero, stop.
 8. **Close.** When every component has landed or stopped, run `deccy validate`, topology and
@@ -138,9 +144,9 @@ draft.
   stale: rebuild it from the current gate.
 - **No raw graph surgery.** The allowed raw jj is `workspace add/list/forget`,
   `status/diff/show/log`, `new <target>` for a landing buffer, `restore --from <draft> --to @`,
+  `rebase -s <prereq> -B <dependent>` for a topology inversion the checker reports,
   `workspace update-stale`, and `describe -m "<summary>" <id>` for a change summary only.
-  Never `jj new -A`, `squash`, `rebase`, `op`, `split`, `metaedit`, `undo`, or `jj abandon`
-  directly. Summaries are the one `jj describe` exception: `-m` only, after landing, never content
+  Never `jj new -A`, `squash`, `op`, `split`, `metaedit`, `undo`, or `jj abandon` directly. Summaries are the one `jj describe` exception: `-m` only, after landing, never content
   or edges. The only abandon path is `scripts/abandon-empty-heads.sh`; its `--force-stray` mode
   abandons a head only when every changed path is a byte-identical restore of an existing node
   document, and it still refuses the working copy, open workspaces, bookmarked or described heads,
