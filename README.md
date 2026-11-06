@@ -167,8 +167,9 @@ curl -fsSL https://raw.githubusercontent.com/edawise/deccy-agent/main/claude/ins
 ```
 
 Each installer clones the bundle once (`~/.local/share/deccy/agent/bundle`, shared by both) and
-runs that folder's `link.sh`. See `opencode/README.md` and `claude/README.md` for per-project
-installs, session profiles and enforcement notes.
+runs that folder's `link.sh`; the Claude installer also drops a `deccy-claude` launcher into
+`~/.local/bin` (`deccy-claude plan` / `deccy-claude orchestrator`). See `opencode/README.md` and
+`claude/README.md` for per-project installs, session profiles and enforcement notes.
 
 Use a fixture repository first. This bundle has not been hardened against a large graph (hundreds of
 nodes).

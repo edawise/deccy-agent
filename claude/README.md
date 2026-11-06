@@ -25,13 +25,30 @@ Two roles are **primary sessions** and three are **subagents**:
 curl -fsSL https://raw.githubusercontent.com/edawise/deccy-agent/main/claude/install.sh | sh
 ```
 
-The installer clones the bundle to `~/.local/share/deccy/agent/bundle` and runs
-`claude/link.sh` from there. Options: `--project <dir>` for a project-local install into
-`<dir>/.claude`, `--ref <branch|tag>`, `--from <dir>` to use an existing checkout in place,
-`--list`, `--uninstall`, `--purge`. `REPO_URL`, `DEST_BUNDLE`, `DEST_SKILLS` and `DEST_AGENTS`
-override the locations.
+One command; three things land:
 
-Manual alternative, from a clone of the repo:
+- the five skills symlinked into `~/.claude/skills/deccy-*` and the five agents into
+  `~/.claude/agents/deccy-*.md` — **global**: every Claude session on the machine sees them
+  (skills stay invisible to models until invoked, by design);
+- a clone of the bundle at `~/.local/share/deccy/agent/bundle`, shared with the OpenCode
+  installer — update it with `git -C ~/.local/share/deccy/agent/bundle pull`; the links stay live;
+- a `deccy-claude` launcher in `~/.local/bin`, so `deccy-claude plan` and
+  `deccy-claude orchestrator` work from any directory. The installer warns if `~/.local/bin`
+  is not on your PATH.
+
+Installer options: `--project <dir>` (links into `<dir>/.claude` instead of global),
+`--ref <branch|tag>`, `--from <dir>` (use an existing checkout in place — also the dev/test
+path), `--list`, `--uninstall` (removes the links and the launcher), `--purge` (also removes
+the bundle clone, and only when no other integration still links into it). `REPO_URL`,
+`DEST_BUNDLE`, `DEST_BIN`, `DEST_SKILLS` and `DEST_AGENTS` override the locations.
+
+**Per-project links in a jj-managed repo:** jj snapshots the `.claude/` links into the working
+copy as new files, and round operations (`jj abandon`, working-copy updates) can delete them —
+observed in practice. Add `.claude/` to the project's `.gitignore` before linking (jj respects
+gitignore), or use the global install, which sidesteps the problem entirely.
+
+Manual alternative, from a clone of the repo (links only — no launcher; use the alias in
+"Run" below):
 
 ```sh
 git clone https://github.com/edawise/deccy-agent.git
@@ -42,47 +59,48 @@ cd deccy-agent
 ./claude/link.sh --uninstall        # remove only symlinks into this bundle
 ```
 
-`link.sh` symlinks only; it never copies and never replaces anything it did not create. Re-running
-it after an edit to `claude/agents/*.md` is unnecessary — the links point into this repo.
+`link.sh` symlinks only; it never copies and never replaces anything it did not create —
+re-running it after an edit to `claude/agents/*.md` is unnecessary, the links point into the
+repo. `DEST_SKILLS` and `DEST_AGENTS` override the destination directories; a foreign symlink
+or a real file in either destination is left alone, and a fresh install refuses to clobber
+one. Skills come from the shared `skills/` at the repo root; agents come from `claude/agents/`.
 
-```sh
-./claude/link.sh                    # global: ~/.claude/skills and ~/.claude/agents
-./claude/link.sh --project <dir>    # <dir>/.claude/skills and <dir>/.claude/agents
-./claude/link.sh --list             # show the links and their targets
-./claude/link.sh --uninstall        # remove only symlinks into this bundle
+### Verify
+
+Agents and skills load when a session **starts**; a running session never notices a newly
+linked `.claude/` — link first, then start the session. The `/agents` wizard was removed in
+Claude Code v2.1.198, and `/list-agents` lists *running* peers rather than definitions, so
+neither can check this. From a fresh session, in any directory:
+
+```text
+List the subagent types you can dispatch — names only.
 ```
 
-`DEST_SKILLS` and `DEST_AGENTS` override the destination directories. Skills come from the shared
-`skills/` at the repo root; agents come from `claude/agents/`.
-
-Install and verify:
-
-```sh
-./claude/link.sh
-ls -la ~/.claude/skills/deccy-*     # five skill directories
-ls -la ~/.claude/agents/deccy-*.md  # five agent files
-```
-
-Inside a session, `/agents` lists the loaded subagents (recent builds print the agents directory
-and a reminder that files are edited directly). If a role is missing, check that `~/.claude/agents/`
-existed when the session started — a running session does not notice a newly created `agents`
-directory — and restart.
-
-`--uninstall` removes exactly the ten links whose target is inside this repo. A foreign symlink or a
-real file in either destination is left alone, and a fresh install refuses to clobber one.
+The answer must name the five `deccy-*` roles. Typing `/` alone shows the five skills as
+slash commands (`/deccy-core` runs one); they never appear in the model's own skill list
+(`disable-model-invocation`), so the slash menu is the user-side check.
 
 ## Run
 
-The two primary roles are launched with `claude/run.sh`, which appends the agent body as a system
-prompt (Claude Code cannot be started *as* an agent file):
+| Role | How you invoke it |
+|---|---|
+| `deccy-plan` | `deccy-claude plan ["request"]` — with a request, one-shot: the layer table prints to the terminal; without, interactive |
+| `deccy-orchestrator` | `deccy-claude orchestrator ["request"]` — without a request, interactive (recommended for a round) |
+| gate-author / drafter / judge | never directly: the orchestrator dispatches them with the Task tool by name. Any Claude session can also dispatch them on request ("use the `deccy-judge` subagent to …") |
+
+`deccy-claude` (or `claude/run.sh` from a checkout) appends the agent file's body as the
+session's system prompt — Claude Code cannot be started *as* an agent file, so this is the
+`mode: all` equivalent of the OpenCode bundle. From a checkout without the launcher, use an
+alias:
 
 ```sh
-./claude/run.sh plan "Plan the next layer for <request>"
-./claude/run.sh plan                    # interactive
-./claude/run.sh orchestrator "Execute the approved layer plan"
-./claude/run.sh orchestrator -- --permission-mode acceptEdits
-./claude/run.sh plan --print-prompt     # print the system prompt, run nothing
+alias deccy-claude='/path/to/deccy-agent/claude/run.sh'
 ```
+
+Do not symlink `run.sh` into a bin directory: it locates its agent files relative to itself.
+Arguments after `--` pass through to `claude` — `deccy-claude plan "…" -- --model <model>` is
+worth using, since a weak session default makes for weak planning. The plan session already
+passes `--disallowedTools "Write,Edit"` itself.
 
 The raw equivalent, if you prefer to build the command yourself:
 
@@ -91,18 +109,26 @@ claude --append-system-prompt "$(./claude/run.sh plan --print-prompt)" \
        --disallowedTools "Write,Edit" -p "Plan the next layer for <request>"
 ```
 
-The plan/orchestrator flow:
+### Plan, then round
 
-1. `deccy-plan` reads the graph read-only and returns one layer table **as its final message**. It
-   writes nothing and has no Edit/Write tools.
-2. You approve or amend the plan. On approval, `deccy-orchestrator` persists it to
-   `~/.local/share/deccy/agent/plan/<round>.plan.md` and reads it back from there — the plan file is
-   round state for the orchestrator, not the planner's output channel.
-3. The orchestrator runs the round: skeleton pass, components, then per unit a `deccy-gate-author`
-   subagent, a `deccy-drafter` subagent and a `deccy-judge` subagent, each spawned with the Task
-   tool and dispatched by agent name with absolute workspace paths in the packet.
-4. The orchestrator lands only judged work, keeps `~/.local/share/deccy/agent/rounds/<round>/ROUND.md`
-   current, and deletes the ledger at close.
+One session is enough. Run `deccy-claude orchestrator` with no request: it finds no approved
+plan at `~/.local/share/deccy/agent/plan/`, so it spawns the `deccy-plan` subagent itself,
+shows you the layer table, and — once you approve **in the same session** — persists the plan
+to `~/.local/share/deccy/agent/plan/<round>.plan.md` and runs the round. Nothing is lost
+between planning and execution, because the planner ran as a child of the session that
+executes.
+
+Two sessions also work, when you want to iterate on a plan before committing to a round:
+`deccy-claude plan "…"` prints the table, you amend it outside the session, then
+`deccy-claude orchestrator` starts fresh and you hand the approved table over in your first
+message ("this is the approved layer plan; persist it and execute it"). The table is the only
+thing that crosses between the sessions — the plan is an artifact, not chat context.
+
+Either way, the orchestrator then runs the round: skeleton pass, partition into components,
+then per unit a `deccy-gate-author` subagent, a `deccy-drafter` subagent and a `deccy-judge`
+subagent — each spawned with the Task tool, dispatched by agent name, with absolute workspace
+paths in the packet. It lands only judged work, keeps
+`~/.local/share/deccy/agent/rounds/<round>/ROUND.md` current, and deletes the ledger at close.
 
 Start on a fixture repository, and launch both sessions from the graph repository's root: subagents
 inherit the primary session's working directory, and the packets only work because they carry
@@ -130,8 +156,10 @@ substituting for a missing `Edit` (see the enforcement table below). You can add
 missing tools structural. `deccy-plan.md` also lists no `Task` tool, so the plan role cannot spawn
 writers once it runs as a subagent.
 
-**Orchestrator session** — allow writes under the round root. Put this in the project's
-`.claude/settings.local.json` (or `~/.claude/settings.json` for every project):
+**Orchestrator session** — run it with `--permission-mode acceptEdits` (or Shift+Tab once after
+it opens): on Manual, the round stalls on an approval prompt for nearly every graph write. Then
+allow writes under the round root. Put this in the project's `.claude/settings.local.json` (or
+`~/.claude/settings.json` for every project):
 
 ```json
 {

@@ -39,6 +39,12 @@ which `git pull`s in place, so updates stay live).
 `DEST_SKILLS` and `DEST_AGENTS` override the destination directories. Skills come from the shared
 `skills/` at the bundle root; agents come from `opencode/agents/`.
 
+**Per-project links in a jj-managed repo:** jj snapshots the `.opencode/` links into the working
+copy as new files, and round operations (`jj abandon`, working-copy updates) can delete them —
+observed in practice with the Claude port's equivalent. Add `.opencode/` to the project's
+`.gitignore` before linking (jj respects gitignore), or use the global install, which
+sidesteps the problem entirely.
+
 Install and verify:
 
 ```sh
