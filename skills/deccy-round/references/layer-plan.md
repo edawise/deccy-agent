@@ -70,7 +70,7 @@ Stop conditions: <...>
    the existing evaluation already depends on the new prerequisite and checks the use.
 6. A refine's new prerequisite already precedes the target in history; check
    `jj log -r '<prereq>::<target>' --no-graph -T 'change_id.shortest(8)'` (empty means it does not
-   precede). Otherwise the round cannot rebase the inversion.
+   precede). Otherwise the plan is inverted; do not rely on a restack.
 7. Every row is licensed by a recorded clause or an earlier row.
 8. No row depends on an unresolved fork. Drop its dependants from this layer instead.
 9. Every `writes` set is disjoint from every other row's, except along an `on` chain. Two units that
@@ -85,7 +85,7 @@ Stop conditions: <...>
 - A row needs a decision outside the seeds or scope — report it as the next layer's seed.
 - An existing node would need a new edge to make the layer work — plan a `refine` row for that node
   that adds the edge and its covering gate; do not add the dependency silently.
-- A refine's new prerequisite does not already precede the target — stop; the round cannot rebase.
+- A refine's new prerequisite does not already precede the target — stop; do not plan the inversion.
 - A fork cannot be resolved now and its dependants are required for the layer — stop.
 - A refine target turns out to carry a different commitment — split it into a `new` row.
 - The plan exceeds `max_units_per_layer` after deduplication — split it into layers.

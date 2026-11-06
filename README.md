@@ -26,8 +26,9 @@ The bundle:
 | `deccy-gate` | gate author | evaluation design, eval matrix, red/green, freeze |
 | `deccy-judge` | judge | clean-room base-red/candidate-green, gate integrity, counterexamples, gate-strength advisory |
 
-All five set `opencode/autoinvoke: false` and `disable-model-invocation: true`; the agent prompts
-load the skills they need.
+All five set `opencode/autoinvoke: false`, `disable-model-invocation: true` and Codex's
+`agents/openai.yaml` policy `allow_implicit_invocation: false`; the agent prompts load the skills
+they need explicitly.
 
 ## Agents
 
@@ -44,6 +45,11 @@ Start with `deccy-plan` to get a layer plan, then `deccy-orchestrator` to execut
 orchestrator launches the other three roles. The plan’s separate prose/alternatives **reviewer**
 is deliberately not a role yet; the judge checks correctness and the orchestrator/user review the
 prose after the verdict. Add it once the round is stable.
+
+OpenCode and Claude Code select these agent files directly. Codex has no `--agent` flag and no
+custom agent type in its V2 spawn surface, so `codex/deccy-codex` starts the two root roles and a
+spawned child binds its role with `deccy-codex register <task_name>`; see
+[`codex/README.md`](codex/README.md).
 
 ## The round in one screen
 
@@ -89,8 +95,9 @@ A unit is either:
 A refine reuses its existing evaluation when it still covers the use, amends it in a gate draft
 first, or adds a new evaluation for an edge it adds. A new edge needs I4 coverage, so the plan's
 gate action is `amend` or `new`, never `reuse` unless the existing evaluation already covers the
-edge. The new prerequisite must already precede the target in history; the round cannot rebase. If
-the change needs a different commitment or a new node, it is a `new` unit, not a refine.
+edge. The new prerequisite must already precede the target in history; a refine must not plan an
+inversion (the skeleton restack is for gate placement, not a refine edge). If the change needs a
+different commitment or a new node, it is a `new` unit, not a refine.
 
 ## jj-direct draft protocol
 
@@ -103,7 +110,8 @@ jj workspace add "$WS" --name "deccy-<round>-<component>-<handle>" -r <base-chan
 ```
 
 The root is fixed because the agents’ edit permissions are scoped to it. Moving it
-requires editing those permissions in `opencode/agents/` and `claude/hooks/deccy-guard.py`.
+requires editing those permissions in `opencode/agents/`, `claude/hooks/deccy-guard.py` and
+`codex/hooks/deccy-guard.py`.
 
 The workspace’s `@` is the draft. Edit in place; never run `jj new` inside it. Run jj from inside
 the workspace (`cd "$WS" && jj ...`), not with `-R` from the trunk.
@@ -154,23 +162,27 @@ See `skills/deccy-round/references/jj-direct.md` for the allowed/forbidden surfa
 
 ## Install
 
-`skills/` is shared at the root; `opencode/` and `claude/` each have their own `agents/`,
-`install.sh` and `link.sh`.
+`skills/` is shared at the root. `opencode/` and `claude/` each have their own `agents/`,
+`install.sh` and `link.sh`; `codex/` has `install.sh`, `link.sh`, the `deccy-codex` launcher and
+the five role prompts (its children are spawned natively, so there are no agent files).
 
 ```sh
 # OpenCode
 curl -fsSL https://raw.githubusercontent.com/edawise/deccy-agent/main/opencode/install.sh | sh
 # Claude Code
 curl -fsSL https://raw.githubusercontent.com/edawise/deccy-agent/main/claude/install.sh | sh
+# Codex
+curl -fsSL https://raw.githubusercontent.com/edawise/deccy-agent/main/codex/install.sh | sh
 ```
 
-Each installer clones the bundle to `~/.local/share/deccy/agent/bundle` (shared by both
+Each installer clones the bundle to `~/.local/share/deccy/agent/bundle` (shared by all three
 integrations) and runs that folder's `link.sh`. Options: `--project <dir>` for a project-local
 install, `--ref <branch|tag>`, `--from <dir>` to use an existing checkout in place, `--list`,
 `--uninstall`, and `--purge` (also removes the bundle clone once no links into it remain).
-`REPO_URL`, `DEST_BUNDLE`, `DEST_SKILLS` and `DEST_AGENTS` override the default locations.
+`REPO_URL`, `DEST_BUNDLE`, `DEST_SKILLS` and `DEST_AGENTS` override the default locations; the
+Codex `link.sh` also accepts `DEST_HOOKS` and `DEST_BIN`.
 
-From a local clone, run `link.sh` directly (`<tool>` is `opencode` or `claude`):
+From a local clone, run `link.sh` directly (`<tool>` is `opencode`, `claude` or `codex`):
 
 ```sh
 ./<tool>/link.sh                        # global install
@@ -179,25 +191,36 @@ From a local clone, run `link.sh` directly (`<tool>` is `opencode` or `claude`):
 ./<tool>/link.sh --uninstall            # remove only symlinks into this bundle
 ```
 
-`link.sh` symlinks the five skill directories from `skills/` and the five agent files from
-`<tool>/agents/`; it never copies and refuses to replace files or links it did not create, so
-`git pull` updates stay live without re-linking. The Claude `link.sh` also registers (and with
-`--uninstall` removes) the guard hook in Claude Code's settings; see `claude/README.md`. For `--project` in a jj-managed repository, add
-`.opencode/` or `.claude/` to `.gitignore` before linking so jj does not snapshot and clean up the
-symlinks during round operations (or use the global install).
+`link.sh` symlinks the five skill directories from `skills/` and, for OpenCode and Claude Code, the
+five agent files from `<tool>/agents/`. The Codex `link.sh` also links the `deccy-codex` launcher.
+It never copies and refuses to replace files or links it did not create, so `git pull` updates stay
+live without re-linking. The Claude `link.sh` registers (and with `--uninstall` removes) the guard
+hook in Claude Code's settings; the Codex `link.sh` registers it in `hooks.json`. See
+`claude/README.md` and `codex/README.md`. For `--project` in a jj-managed repository, add
+`.opencode/`, `.claude/`, or `.agents/` and `.codex/` to `.gitignore` before linking so jj does not
+snapshot and clean up the symlinks during round operations (or use the global install).
 
-See [`opencode/README.md`](opencode/README.md) and [`claude/README.md`](claude/README.md) for
-tool-specific paths, invocation, session setup and enforcement.
+See [`opencode/README.md`](opencode/README.md), [`claude/README.md`](claude/README.md) and
+[`codex/README.md`](codex/README.md) for tool-specific paths, invocation, session setup and
+enforcement.
 
 Use a fixture repository first. This bundle has not been hardened against a large graph (hundreds of
 nodes).
 
 ## Current limitations
 
-- **Subagent cwd.** Neither OpenCode’s `subagent` tool nor Claude Code’s `Agent` tool has a `cwd`
-  parameter; children inherit the parent session’s directory. Launch primary sessions from the
-  graph repository root; the role prompts require absolute workspace paths and `cd` for shell
-  commands, and the edit permissions are scoped to the draft/judge roots.
+- **Subagent cwd.** None of OpenCode’s `subagent`, Claude Code’s `Agent` or Codex’s `spawn_agent`
+  has a `cwd` parameter; children inherit the parent session’s directory. Launch primary sessions
+  from the graph repository root; the role prompts require absolute workspace paths and `cd` for
+  shell commands, and the edit permissions are scoped to the draft/judge roots.
+- **Codex role binding.** Codex’s V2 `spawn_agent` cannot select a custom agent type, so children
+  are bound to a role by a role-prefixed task name and the `deccy-codex register <task_name>`
+  handshake. The guard enforces the binding, but it is not cryptographic identity. Spawned children
+  inherit the parent’s sandbox and filesystem access; the guard scopes writes, not reads or
+  sandboxing.
+- **Codex hook trust.** Codex runs non-managed hooks only after `/hooks` trust, and a project
+  `.codex/` layer must also be trusted. Without that trust only the role prompts enforce the
+  boundaries.
 - **Refine units.** A refine draft is based at the existing target and restores the gate paths for
   running. The landable set is the draft diff minus those paths; the orchestrator must subtract
   them and never record them into the target. If the refine adds a new `ref`, the node JSON is

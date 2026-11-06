@@ -119,6 +119,17 @@ check_blockers() {
   add_blockers "$HOME/.config/opencode/agents"
   add_blockers "$HOME/.claude/skills"
   add_blockers "$HOME/.claude/agents"
+  add_blockers "$HOME/.agents/skills"
+  add_blockers "$HOME/.codex/bin"
+  add_blockers "$HOME/.local/bin"
+  if [ -n "$PROJECT_DIR" ]; then
+    add_blockers "$PROJECT_DIR/.opencode/skills"
+    add_blockers "$PROJECT_DIR/.opencode/agents"
+    add_blockers "$PROJECT_DIR/.claude/skills"
+    add_blockers "$PROJECT_DIR/.claude/agents"
+    add_blockers "$PROJECT_DIR/.agents/skills"
+    add_blockers "$PROJECT_DIR/.codex/bin"
+  fi
   add_blockers "${DEST_SKILLS:-}"
   add_blockers "${DEST_AGENTS:-}"
 }
@@ -131,8 +142,8 @@ case "$MODE" in
     run_link --uninstall
     echo
     echo "bundle checkout: $BUNDLE"
-    echo "it is shared by both integrations (opencode/ and claude/); it was not removed."
-    echo "remove it after both are uninstalled:  sh $0 --purge"
+    echo "it is shared by all three integrations (opencode/, claude/, codex/); it was not removed."
+    echo "remove it after all three are uninstalled:  sh $0 --purge"
     ;;
   purge)
     if [ -n "$FROM" ]; then
@@ -149,7 +160,7 @@ case "$MODE" in
     if [ -n "$blockers" ]; then
       echo "refusing to remove $BUNDLE: bundle-owned symlinks remain:" >&2
       printf '%s' "$blockers" >&2
-      echo "uninstall them (the other integration's link.sh --uninstall), then re-run --purge" >&2
+      echo "uninstall them (the other integrations' link.sh --uninstall), then re-run --purge" >&2
       exit 1
     fi
     rm -rf "$BUNDLE"
@@ -158,7 +169,7 @@ case "$MODE" in
   install)
     run_link
     echo
-    echo "bundle checkout: $BUNDLE (shared by opencode/ and claude/)"
+    echo "bundle checkout: $BUNDLE (shared by opencode/, claude/ and codex/)"
     echo "update later with:  git -C \"$BUNDLE\" pull"
     echo "run:  claude --agent deccy-plan   |   claude --agent deccy-orchestrator"
     ;;

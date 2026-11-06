@@ -58,6 +58,8 @@ in place; keep its `evaluates` and keep `depends_on` except for the edge the pla
 - `content.type` names the form: `text`, `ears`, `visual-spec`, `json-schema`, and so on.
 - `content.ref` is `"inline"` with `content.content`, or a list of repo-relative paths carrying
   the content. If you implement files, list them in `ref`; otherwise they are undocumented.
+- When `ref` is a list, **omit `content.content`**. The body is in the files; the schema rejects a
+  body alongside a ref list. Keep `content.type`, `content.ref` and `content.rationale`.
 - `content.rationale` says why this decision is right. Write it **after** the implementation.
 - `depends_on` names the prerequisites by change id. Do not add the gate evaluation itself to
   `depends_on`; the gate is coverage, not a decision prerequisite.

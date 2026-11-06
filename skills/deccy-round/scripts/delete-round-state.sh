@@ -1,5 +1,5 @@
 #!/bin/sh
-# Delete one round's ROUND.md ledger.
+# Delete one round's live state: ROUND.md and map.tsv.
 #
 # The round ledger is live work state, not audit: the orchestrator deletes it after the
 # close report and the user's approval. This script is the orchestrator's only delete
@@ -7,7 +7,7 @@
 #   - a missing or malformed round id;
 #   - a path outside $ROOT/rounds/;
 #   - a symlinked round directory.
-# It removes ROUND.md and then the round directory only if that directory is empty.
+# It removes ROUND.md and map.tsv, then the round directory only if that directory is empty.
 # It never deletes a workspace, a node, or anything outside the round's own directory.
 #
 # Usage: delete-round-state.sh <round-id>
@@ -36,8 +36,12 @@ if [ ! -d "$DIR" ]; then
   exit 1
 fi
 
-rm -f "$DIR/ROUND.md"
-echo "delete-round-state: removed $DIR/ROUND.md"
+for file in ROUND.md map.tsv; do
+  if [ -e "$DIR/$file" ]; then
+    rm -f "$DIR/$file"
+    echo "delete-round-state: removed $DIR/$file"
+  fi
+done
 
 if [ -z "$(ls -A "$DIR" 2>/dev/null)" ]; then
   rmdir "$DIR" 2>/dev/null || true

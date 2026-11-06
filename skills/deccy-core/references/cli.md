@@ -126,8 +126,9 @@ python3 "$CORE/scripts/check-ref-custody.py" [repo-root] # no change touches ano
 
 `<deccy-core skill base directory>` is the installed deccy-core skill directory:
 `~/.config/opencode/skills/deccy-core` for OpenCode, `~/.claude/skills/deccy-core` for Claude
-Code, or `<project>/.claude/skills/deccy-core` / `<project>/.opencode/skills/deccy-core` when
-linked per-project.
+Code, `~/.agents/skills/deccy-core` for Codex, or `<project>/.claude/skills/deccy-core` /
+`<project>/.opencode/skills/deccy-core` / `<project>/.agents/skills/deccy-core` when linked
+per-project.
 
 Both are diagnostics: they read `jj` history and report. The dependency story the graph records
 lives in its edges, and `deccy new --on` positions new nodes correctly by construction. If

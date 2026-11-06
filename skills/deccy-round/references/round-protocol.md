@@ -117,7 +117,9 @@ For each `new` row, in dependency order:
    ```
 
    Record `G-<handle><TAB>id`. The `--on` set is what makes I4 coverage structural: the evaluation
-   depends on exactly the decision's prerequisites and evaluates the decision.
+   depends on exactly the decision's prerequisites and evaluates the decision. `jj new -A` inserts
+   the gate before the decision, so the gate records end with an inversion; §5.5 restacks the chain
+   before any implementation workspace opens.
 
 For a `refine <existing id>` row, create no decision skeleton. Record the target id under its
 handle, its current `ref` paths, its current `depends_on` set, and whether its gate is `reuse`d,
@@ -132,8 +134,8 @@ then the new path (see 5.3 and 8).
 is not touched again except by gate and implementation landings.
 
 `deccy validate` is expected to be unhappy during this phase: placeholders and not-yet-authored
-evaluation skeletons leave coverage holes. Validate at the end of each unit's gate step and at
-close, not immediately after the pass.
+evaluation skeletons leave coverage holes. Validate after every `deccy record` and at close, not
+immediately after the pass.
 
 ## 4. Partition into components
 
@@ -178,6 +180,7 @@ restores the new test paths into it; the gate author only runs the red command t
 
 ```sh
 CHECK="$ROOT/workspaces/drafts/$ROUND/<component>/gate-check-<handle>"
+mkdir -p "$(dirname "$CHECK")"
 jj workspace add "$CHECK" --name "deccy-$ROUND-<component>-gate-check-<handle>" -r "$TARGET_ID"
 cd "$CHECK"
 printf '%s\n' "$NEW_GATE_PATHS" | xargs -r jj restore --from "$GATE_DRAFT" --to @ --
@@ -198,6 +201,7 @@ evaluation with 5.3, freeze with 5.4, then continue.
 ```sh
 WS="$ROOT/workspaces/drafts/$ROUND/<component>/gate-<handle>"
 NAME="deccy-$ROUND-<component>-gate-<handle>"
+mkdir -p "$(dirname "$WS")"
 jj workspace add "$WS" --name "$NAME" -r "$EVAL_ID"
 ```
 
@@ -245,6 +249,8 @@ PATHS=$(jj diff --summary -r @ | sed -n 's/^[A-Z] //p')
 
 # in the trunk
 cd <repo-root>
+# Snapshot the gate draft first.
+(cd "$WS" && jj status)
 jj new "$EVAL_ID"
 printf '%s\n' "$PATHS" | xargs -r jj restore --from "$DRAFT" --to @ --
 # if any path is a new ref, two-step:
@@ -262,7 +268,13 @@ directly.
 
 `deccy record` refuses a path that is not changed in the trunk working copy or not owned by the
 evaluation. Do not work around a refusal with `jj squash`; inspect the paths and the evaluation's
-`ref`, fix the draft, and retry.
+`ref`, fix the draft, and retry. After every successful `deccy record`, run `deccy validate`; a
+schema or resolution failure stops the unit before the next record.
+
+**Snapshot before restore.** `jj restore --from "$DRAFT"` reads the source change's last snapshot.
+Files written with `apply_patch` are not visible to another workspace until a jj command runs in the
+draft workspace. Before restoring, run `(cd "$WS" && jj status)` in the draft workspace; the author
+should also run `jj status` before reporting.
 
 **New ref paths.** Ownership is checked against the target's current document. If a draft adds a
 path that is not yet in the target's `ref`, the one-call record refuses it. The draft's node JSON
@@ -293,6 +305,32 @@ judge recomputes the hash after applying the gate; a mismatch is a **gate-integr
 an amended or newly added refine gate, this hash replaces the old one (or is the first); any
 verdict based on an older hash is void.
 
+### 5.5 Restack the gate chain
+
+Once every gate in the component is recorded and frozen, restack the skeleton chain before opening
+an implementation workspace. `deccy new` inserted each gate before its decision, so the checker
+reports every evaluation as an inversion until the chain is restacked:
+
+```sh
+python3 "$CORE/scripts/check-topology.py"
+jj rebase -s <prereq> -B <dependent>      # the command the checker prints
+python3 "$CORE/scripts/check-topology.py"
+```
+
+Repeat while the checker reports an inversion. It reads nodes from the working-copy tree, so if
+`@` is below part of the chain it may report only the inversions it can see. Once it is clean, put
+`@` at the round tip and re-check with the full tree:
+
+```sh
+<deccy-round-skill-dir>/scripts/set-round-tip.sh
+python3 "$CORE/scripts/check-topology.py"
+```
+
+If that reports another inversion, restack and repeat. A clean check with `@` at the tip is the gate
+for opening implementation workspaces. Change ids survive the move, so node filenames and edges are
+untouched. This is the one raw-jj history move the orchestrator may make; the checker is the oracle.
+If a restack would move a landed decision's content or a frozen gate, stop and report it instead.
+
 ## 6. Implementation drafts: parallel, at the frozen gate
 
 ### 6.0 Refresh after a record
@@ -319,6 +357,7 @@ the tree:
 ```sh
 WS="$ROOT/workspaces/drafts/$ROUND/<component>/impl-<handle>"
 NAME="deccy-$ROUND-<component>-impl-<handle>"
+mkdir -p "$(dirname "$WS")"
 jj workspace add "$WS" --name "$NAME" -r "$EVAL_ID"
 ```
 
@@ -347,6 +386,7 @@ target's current node and refs:
 ```sh
 WS="$ROOT/workspaces/drafts/$ROUND/<component>/refine-<handle>"
 NAME="deccy-$ROUND-<component>-refine-<handle>"
+mkdir -p "$(dirname "$WS")"
 jj workspace add "$WS" --name "$NAME" -r "$TARGET_ID"
 cd "$WS"
 printf '%s\n' "$GATE_PATHS" | xargs -r jj restore --from "$EVAL_ID" --to @ --
@@ -403,6 +443,7 @@ The judge never vetoes a candidate on weakness.
 
 ```sh
 JROOT="$ROOT/workspaces/judge/$ROUND/<component>/<handle>"
+mkdir -p "$JROOT"
 jj workspace add "$JROOT/base" --name "deccy-$ROUND-<component>-<handle>-base" -r "$DECISION_ID"
 jj workspace add "$JROOT/cand" --name "deccy-$ROUND-<component>-<handle>-cand" -r "$DECISION_ID"
 ```
@@ -466,20 +507,24 @@ DRAFT=$(jj log -r @ --no-graph -T 'change_id.shortest(8)')
 # Confirm DRAFT and DRAFT_PATHS still match the judge's packet before landing.
 
 cd <repo-root>
+# Snapshot the draft first; apply_patch edits are invisible to this workspace until a jj command
+# runs in the draft workspace.
+(cd "$WS" && jj status)
 jj new "$TARGET_ID"
 printf '%s\n' "$DRAFT_PATHS" | xargs -r jj restore --from "$DRAFT" --to @ --
 printf '%s\n' "$DRAFT_PATHS" | xargs -r deccy record --to "$TARGET_ID"
 jj workspace forget "$NAME"
-jj new "$TARGET_ID"
+jj new "$TARGET_ID"       # temporary: @ is a child of the target, below its gate
 # then refresh every other open workspace (§6.0) and re-run its gate
 ```
 
 `$TARGET_ID` is the new decision for a `new` unit and the existing decision for a `refine` unit.
 Land exactly the judged paths. For a refine, never restore or record `$GATE_PATHS`; they belong to
 the evaluation. If a landable path is a new `ref` for the target, record `nodes/<target>.json`
-first, then record the new path. If the draft changed after judging, the verdict is stale: rejudge
-or reject. After the record, re-read the target and compare the landed paths to the draft; the gate
-hash must still match.
+first, run `deccy validate`, then record the new path, and validate again. A schema or resolution
+failure is a stop; do not continue landing. If the draft changed after judging, the verdict is
+stale: rejudge or reject. After the record, re-read the target and compare the landed paths to the
+draft; the gate hash must still match.
 
 For a unit with no alternative, the same sequence records the single judged draft.
 
@@ -487,6 +532,10 @@ Land a component's units in dependency order. Components land independently: a f
 does not wait for the others. After each landing, refresh every other open workspace and re-run its
 gate. If a gate result changes because another component landed, stop: the components were not
 independent and the plan's partition was wrong.
+
+`jj new "$TARGET_ID"` only returns `@` to a child of the target. The target's gate is its child, so
+`@` is a sibling of the gate, not above the round tip. After the last landing and workspace forget,
+§8.1 moves `@` above the highest landed node change.
 
 Forget every losing alternative with `jj workspace forget`.
 
@@ -496,8 +545,19 @@ Forget every losing alternative with `jj workspace forget`.
 forgotten while it still carried content can survive as a head. A refine or judge workspace also
 leaves a head when its only diff is a gate path restored for review, such as
 `nodes/<eval>.json`. Confirm `jj workspace list` is `default` only first — an open judge or draft
-workspace keeps its `@` as a legitimate head and the cleanup refuses it. After returning the
-working copy to the round tip, run the verified cleanup:
+workspace keeps its `@` as a legitimate head and the cleanup refuses it.
+
+After every component has landed and every draft workspace is forgotten, move `@` above the round's
+highest landed node change. A landed decision's gate is its child, so `jj new <target>` alone leaves
+the gate as a sibling head:
+
+```sh
+<deccy-round-skill-dir>/scripts/set-round-tip.sh
+```
+
+The script finds the node change — the change carrying its own `nodes/<id>.json` — that no other
+node change descends from, and starts an empty change above it. It refuses a fork of two node
+changes; that is a stop, not a cleanup. Then run the verified cleanup:
 
 ```sh
 <deccy-round-skill-dir>/scripts/abandon-empty-heads.sh --dry-run
@@ -507,7 +567,9 @@ jj log -r 'heads(all())'
 
 `<deccy-round-skill-dir>` is the installed `deccy-round` skill directory:
 `~/.config/opencode/skills/deccy-round` for OpenCode, `~/.claude/skills/deccy-round` for Claude
-Code, or `<project>/.claude/skills/deccy-round` when linked per-project.
+Code, `~/.agents/skills/deccy-round` for Codex, or `<project>/.claude/skills/deccy-round` /
+`<project>/.opencode/skills/deccy-round` / `<project>/.agents/skills/deccy-round` when linked
+per-project.
 
 The script abandons heads that are empty, undescribed, unbookmarked, not an open workspace's
 working-copy commit, and not a node's own change (`nodes/<id>.json`). With `--force-stray`, it also
@@ -554,12 +616,11 @@ After the user approves the close report, delete the round ledger:
 <deccy-round-skill-dir>/scripts/delete-round-state.sh "$ROUND"
 ```
 
-`ROUND.md` is live work state, not audit: the close report is the durable record. The script removes
-`rounds/$ROUND/ROUND.md` and the empty round directory; it refuses a missing or malformed round id,
-a path outside `rounds/`, and a symlinked round directory. It never deletes a workspace, a node, or
-anything outside the round's own directory. A nonzero exit is a stop: report it and ask. `map.tsv`
-lives in the same directory; remove it before the directory delete, or let the script keep the
-directory and remove both files first.
+`ROUND.md` and `map.tsv` are live work state, not audit: the close report is the durable record.
+The script removes `rounds/$ROUND/ROUND.md` and `rounds/$ROUND/map.tsv`, then the round directory
+if it is empty; it refuses a missing or malformed round id, a path outside `rounds/`, and a
+symlinked round directory. It never deletes a workspace, a node, or anything outside the round's
+own directory. A nonzero exit is a stop: report it and ask.
 
 ## 10. Failure handling
 
@@ -574,9 +635,9 @@ directory and remove both files first.
 | Judge reports gate-integrity | Stop the unit. The gate author reopens a gate draft; the old hash and verdict are void. Re-record the gate, re-freeze, re-open implementation drafts. |
 | Refine landable set contains a gate path | The draft edited the gate or the path subtraction failed. Stop; restore the gate path from `$EVAL_ID`, re-snapshot, and re-judge. Never land a gate path into the target. |
 | Refine needs an edge the plan did not name, or a different decision | Stop. An unnamed edge is a plan change; a different decision is a `new` unit (or a structure round). Do not fold either into the target. |
-| Refine edge inverts topology | Stop. The new prerequisite must already precede the target; the round does not rebase. Re-plan or move it to a structure round. |
+| Refine edge inverts topology | Stop. The new prerequisite must already precede the target; the skeleton restack is for gate placement, not a refine edge. Re-plan or move it to a structure round. |
 | Reused refine gate already passes on the target | The gate is not red for the change. Report `gate-weak`; the user decides whether the change is already satisfied or the gate must be amended first. |
-| `heads(all())` has a stray head after `workspace forget` | Run `scripts/abandon-empty-heads.sh`; it abandons verified empty, undescribed, unbookmarked, non-open-workspace, non-node heads. If the head is a restore of content an existing node owns, run it with `--force-stray` (byte-identical only). If the head is a conflicted copy of existing node documents, add `--force-superseded`. It still refuses a clean non-identical node copy. If it exits nonzero, stop and report the remaining head. Never `jj abandon` directly. |
+| `heads(all())` has a stray head after `workspace forget` | Run `scripts/set-round-tip.sh` first, then `scripts/abandon-empty-heads.sh`; it abandons verified empty, undescribed, unbookmarked, non-open-workspace, non-node heads. If the head is a restore of content an existing node owns, run it with `--force-stray` (byte-identical only). If the head is a conflicted copy of existing node documents, add `--force-superseded`. It still refuses a clean non-identical node copy. If it exits nonzero, stop and report the remaining head. Never `jj abandon` directly. |
 | `heads(all())` has a non-empty head or more than one head after cleanup | Stop. The round produced a fork or left a real head; do not abandon a non-empty change or rebase. Report it and ask. |
 | Session died | `jj workspace list`; `cd` into the workspace; `jj status`; resume. The workspace and draft change survive. |
 | User changes scope mid-round | Stop the affected component; close or park its open drafts; re-plan that component as a new layer. Do not add a unit that was not in the approved layer. |

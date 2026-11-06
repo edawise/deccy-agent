@@ -34,6 +34,7 @@ jj diff --summary -r @
 | `jj workspace add <path> --name <name> -r <base>` | open a draft |
 | `jj workspace list` | see open drafts and stale state |
 | `jj workspace forget <name>` | drop a draft; check for an empty leftover head |
+| `scripts/set-round-tip.sh` | after the last landing, put `@` above the highest landed node change |
 | `scripts/abandon-empty-heads.sh [--force-stray] [--force-superseded]` | the only abandon path: verified stray heads; `--force-stray` also accepts a head whose every changed path is a byte-identical restore of an existing node's own content (its document or a path its `content.ref` lists); `--force-superseded` accepts a head whose every changed path is an existing `nodes/<owner>.json` and which jj reports as conflicted |
 | `jj workspace update-stale` | refresh a workspace after the trunk moved |
 | `jj status` | snapshot the draft and show changes |
@@ -41,13 +42,14 @@ jj diff --summary -r @
 | `jj log -r @ --no-graph -T 'change_id.shortest(8)'` | read the draft change id |
 | `jj show`, `jj file show` | read content |
 | `jj new <target>` (trunk only) | create a landing buffer child of the target |
+| `jj rebase -s <prereq> -B <dependent>` (trunk only) | restack a topology inversion; the checker prints the exact command |
 | `jj restore --from <draft> --to @ -- <paths>` (trunk only) | copy the draft’s content into the buffer |
 | `jj restore --from <eval> --to @ -- <gate-paths>` (refine draft) | add the frozen gate test for running; not landable |
 
 ## Forbidden in the prototype
 
 - `jj new -A` — reparents every child and makes open workspaces stale. `deccy new` owns it.
-- `jj squash`, `jj rebase`, `jj split`, `jj metaedit`, `jj undo`, `jj op` — graph surgery.
+- `jj squash`, `jj split`, `jj metaedit`, `jj undo`, `jj op` — graph surgery.
   `deccy record`/`remove`/`undo` own it.
 - `jj describe` — except the summary-only orchestrator exception below. It never changes node
   content or edges.
@@ -56,11 +58,17 @@ jj diff --summary -r @
 
 ## Orchestrator-only exceptions
 
-The orchestrator, and only the orchestrator, may use these two:
+The orchestrator, and only the orchestrator, may use these:
 
+- `jj rebase -s <prereq> -B <dependent>` — restack a topology inversion reported by
+  `check-topology.py`. Use the command the checker prints, re-run the checker until clean, and
+  never use it to force a fork or touch a frozen gate; change ids survive the move.
 - `jj describe -m "<summary>" <id>` — change a landed node's summary after a landing. This is
   the one raw-jj exception recorded in `deccy-core/references/cli.md`: summary only, never
   content or edges, and never before the content is judged and landed.
+- `scripts/set-round-tip.sh` — after the last landing, start an empty change above the node change
+  that no other node change descends from. `jj new <target>` alone leaves the target's gate as a
+  sibling head.
 - `scripts/abandon-empty-heads.sh --force-stray --force-superseded` — after a landing, abandon a
   head whose every changed path is a byte-identical restore of content an existing node owns (its
   document or a path its `content.ref` lists), or a conflicted copy of existing node documents
@@ -159,7 +167,7 @@ jj new "$TARGET"
 `deccy record` runs `jj squash --into <target>` internally, so the graph write stays in the CLI.
 `jj workspace forget` removes the workspace, but not reliably its working-copy commit: a draft
 forgotten while it still carried content can survive as an empty head. After all drafts are
-forgotten, run `scripts/abandon-empty-heads.sh`; it abandons only verified empty, undescribed,
+forgotten, run `scripts/set-round-tip.sh`, then `scripts/abandon-empty-heads.sh`; it abandons only verified empty, undescribed,
 unbookmarked, non-open-workspace, non-node heads and requires exactly one head afterwards. Do not run `jj abandon` directly.
 If the draft has descendants (it should not), forget leaves them behind — another reason not to run
 `jj new` inside a draft.

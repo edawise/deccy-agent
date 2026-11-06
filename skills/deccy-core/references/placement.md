@@ -82,8 +82,9 @@ jj log -r '::@' --no-graph -T 'change_id.shortest(8) ++ "\n"'
 
 `<deccy-core skill base directory>` is the installed deccy-core skill directory:
 `~/.config/opencode/skills/deccy-core` for OpenCode, `~/.claude/skills/deccy-core` for Claude
-Code, or `<project>/.claude/skills/deccy-core` / `<project>/.opencode/skills/deccy-core` when
-linked per-project.
+Code, `~/.agents/skills/deccy-core` for Codex, or `<project>/.claude/skills/deccy-core` /
+`<project>/.opencode/skills/deccy-core` / `<project>/.agents/skills/deccy-core` when linked
+per-project.
 
 A report naming a prerequisite newer than its dependent is fixed by moving that prerequisite
 **below** its dependents — and the cheapest fix is not to need one:

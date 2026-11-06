@@ -187,15 +187,16 @@ Full commands and failure handling: `references/round-protocol.md`; jj gotchas:
 - **No graph writes by non-orchestrators.** Drafters and gate authors edit files in their
   workspaces; the orchestrator lands them. The judge is read-only.
 - **Clean up stray heads.** `jj workspace forget` may leave a head. After all drafts are forgotten,
-  run `scripts/abandon-empty-heads.sh`; use `--force-stray` only for a head whose every changed path
-  is a byte-identical restore of an existing node document. Never run `jj abandon` directly. A
-  nonzero exit is a stop.
+  run `scripts/set-round-tip.sh` so `@` is above the highest landed node change, then run
+  `scripts/abandon-empty-heads.sh`; use `--force-stray` only for a head whose every changed path is
+  a byte-identical restore of an existing node document. Never run `jj abandon` directly. A nonzero
+  exit is a stop.
 - **Summary updates are the one `jj describe` exception.** After a landing, update a node's jj
   summary with `jj describe -m "<summary>" <id>`: summary only, never content or edges.
-- **Delete the round ledger at close.** `ROUND.md` is live work state, not audit. After the user
-  approves the close report, run `scripts/delete-round-state.sh <round>`; it removes the ledger and
-  the empty round directory. The close report is the durable record. Never delete a workspace, a
-  node, or anything outside `rounds/`.
+- **Delete the round ledger at close.** `ROUND.md` and `map.tsv` are live work state, not audit.
+  After the user approves the close report, run `scripts/delete-round-state.sh <round>`; it removes
+  both files and the empty round directory. The close report is the durable record. Never delete a
+  workspace, a node, or anything outside `rounds/`.
 - **Stop rules.** Missing node/edge, unsettled prerequisite, unresolved fork, `deccy record`
   refusal, stale conflict, a judge rejection, or a gate-integrity failure: stop the affected unit
   or component, report, and ask. A `gate-weak` advisory is not a stop; it is a user choice. Do not
