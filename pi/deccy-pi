@@ -1,0 +1,233 @@
+#!/bin/sh
+# Start a deccy role in Pi.
+#
+# Usage:
+#   deccy-pi plan ["request"] [pi args...]           # planner root session
+#   deccy-pi orchestrator ["request"] [pi args...]   # orchestrator root session
+#
+# The launcher sets DECCY_ROLE, DECCY_ROLE_FILE, DECCY_BUNDLE, DECCY_BIN,
+# DECCY_SKILLS, DECCY_AGENT_ROOT and DECCY_STATE. It does not pass the
+# role body as a user message: pi/extensions/deccy-role.ts adds it to the root
+# system prompt on every turn, so an interactive session starts idle. The role
+# file is the single source of truth for the role prompt, the subagent
+# definition and the permission policy.
+#
+# Non-interactive mode (-p/--print, or --mode json|rpc) refuses to start with
+# no prompt and no piped stdin.
+#
+# Environment:
+#   DECCY_AGENT_ROOT          deccy state root (default: ~/.local/share/deccy/agent)
+#   DECCY_SKILLS              skills root override
+#   DECCY_STATE               state root override
+#   DECCY_PI_CWD              working directory override
+#   DECCY_PI_APPROVE=1        trust project-local files (default for project installs)
+#   DECCY_PI_NO_APPROVE=1     ignore project-local files (default for global installs)
+#   PI_AGENT_DIR              Pi agent directory (default: $PI_CODING_AGENT_DIR or ~/.pi/agent)
+set -eu
+
+SELF=$0
+case "$SELF" in
+  */*) ;;
+  *) SELF=$(command -v "$SELF" 2>/dev/null || printf '%s\n' "$SELF");;
+esac
+
+# Keep the path the user invoked; a project install is recognized by its link location.
+INVOKED=$(CDPATH= cd -- "$(dirname -- "$SELF")" && pwd)/$(basename -- "$SELF")
+
+if command -v python3 >/dev/null 2>&1; then
+  SELF=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$SELF")
+fi
+HERE=$(CDPATH= cd -- "$(dirname -- "$SELF")" && pwd)
+BUNDLE=$(CDPATH= cd -- "$HERE/.." && pwd)
+
+usage() {
+  sed -n '2,25p' "$SELF"
+}
+
+if [ $# -eq 0 ]; then
+  usage >&2
+  exit 2
+fi
+
+MODE=$1
+shift
+case "$MODE" in
+  plan|orchestrator) ;;
+  -h|--help|help|-help) usage; exit 0;;
+  *) echo "unknown mode: $MODE (see --help)" >&2; exit 2;;
+esac
+
+# True when Pi would receive at least one prompt/message or @file. Options that
+# take a value are skipped so a model or session name is not mistaken for a
+# prompt. A prompt beginning with "-" must follow "--", matching Pi.
+has_message() {
+  saw_end=0
+  need_value=0
+  for arg do
+    if [ "$saw_end" -eq 1 ]; then return 0; fi
+    if [ "$need_value" -eq 1 ]; then need_value=0; continue; fi
+    case "$arg" in
+      --) saw_end=1;;
+      --provider|--model|--api-key|--system-prompt|--append-system-prompt|--mode|--session|--session-id|--fork|--session-dir|--name|--models|--tools|--exclude-tools|--thinking|--extension|--skill|--prompt-template|--theme|--use-theme|--tui-mode)
+        need_value=1;;
+      --provider=*|--model=*|--api-key=*|--system-prompt=*|--append-system-prompt=*|--mode=*|--session=*|--session-id=*|--fork=*|--session-dir=*|--name=*|--models=*|--tools=*|--exclude-tools=*|--thinking=*|--extension=*|--skill=*|--prompt-template=*|--theme=*|--use-theme=*|--tui-mode=*)
+        ;;
+      -n|-t|-xt|-e) need_value=1;;
+      -*) ;;
+      *) return 0;;
+    esac
+  done
+  return 1
+}
+
+# -p/--print and --mode json|rpc run a single turn. They need a prompt unless
+# the caller pipes stdin; otherwise Pi exits silently without doing any work.
+NON_INTERACTIVE=0
+NON_RUN=0
+NEED_MODE_VALUE=0
+for arg do
+  if [ "$NEED_MODE_VALUE" -eq 1 ]; then
+    case "$arg" in
+      json|rpc) NON_INTERACTIVE=1;;
+    esac
+    NEED_MODE_VALUE=0
+    continue
+  fi
+  case "$arg" in
+    -p|--print) NON_INTERACTIVE=1;;
+    --mode) NEED_MODE_VALUE=1;;
+    --mode=json|--mode=rpc) NON_INTERACTIVE=1;;
+    -h|--help|-v|--version|--list-models|--export) NON_RUN=1;;
+    --) break;;
+  esac
+done
+
+ROLE="deccy-$MODE"
+ROLE_FILE="$BUNDLE/pi/agents/$ROLE.md"
+[ -f "$ROLE_FILE" ] || {
+  echo "deccy-pi: missing role file $ROLE_FILE" >&2
+  exit 1
+}
+EXTENSION="$BUNDLE/pi/extensions/deccy-role.ts"
+
+# The extension supplies the role body. Without it the body falls back to a user
+# message below, so a degraded session still has its instructions.
+if [ "$NON_INTERACTIVE" -eq 1 ] && [ "$NON_RUN" -eq 0 ] &&
+  [ -f "$EXTENSION" ] && ! has_message "$@"; then
+  if [ -t 0 ]; then
+    echo "deccy-pi: non-interactive mode needs a prompt or message" >&2
+    echo "  pass one: deccy-pi $MODE -p \"your request\"" >&2
+    echo "  or pipe:  echo \"your request\" | deccy-pi $MODE -p" >&2
+    exit 2
+  fi
+fi
+
+command -v pi >/dev/null 2>&1 || {
+  echo "deccy-pi: pi is not on PATH (install Pi first: https://pi.dev)" >&2
+  exit 1
+}
+command -v jj >/dev/null 2>&1 || echo "deccy-pi: warning: jj is not on PATH" >&2
+command -v deccy >/dev/null 2>&1 || echo "deccy-pi: warning: deccy is not on PATH" >&2
+
+AGENT_ROOT="${DECCY_AGENT_ROOT:-$HOME/.local/share/deccy/agent}"
+PI_DIR="${PI_AGENT_DIR:-${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}}"
+
+PROJECT_MODE=0
+PROJECT_ROOT=""
+case "$INVOKED" in
+  */.pi/bin/deccy-pi)
+    PROJECT_MODE=1
+    PROJECT_ROOT=${INVOKED%/.pi/bin/deccy-pi}
+    ;;
+esac
+
+if [ -n "${DECCY_PI_CWD:-}" ]; then
+  WORKDIR=$DECCY_PI_CWD
+elif [ "$PROJECT_MODE" -eq 1 ]; then
+  WORKDIR=$PROJECT_ROOT
+else
+  WORKDIR=$AGENT_ROOT
+fi
+
+if [ -n "${DECCY_SKILLS:-}" ]; then
+  SKILLS_ROOT=$DECCY_SKILLS
+elif [ "$PROJECT_MODE" -eq 1 ]; then
+  SKILLS_ROOT=$PROJECT_ROOT/.pi/skills
+else
+  SKILLS_ROOT=$PI_DIR/skills
+fi
+
+STATE_ROOT="${DECCY_STATE:-$AGENT_ROOT/state}"
+
+mkdir -p "$WORKDIR" "$AGENT_ROOT/plan" "$AGENT_ROOT/rounds" \
+  "$AGENT_ROOT/workspaces/drafts" "$AGENT_ROOT/workspaces/judge" "$STATE_ROOT"
+
+# Approval defaults: a project install owns the project's .pi/ layer; a global
+# install runs from the neutral root and ignores project-local files.
+HAS_APPROVE=0
+HAS_NO_APPROVE=0
+HAS_NAME=0
+for arg in "$@"; do
+  case "$arg" in
+    --approve|-a) HAS_APPROVE=1;;
+    --no-approve|-na) HAS_NO_APPROVE=1;;
+    --name|-n) HAS_NAME=1;;
+  esac
+done
+APPROVE_FLAG=""
+if [ "$HAS_APPROVE" -eq 0 ] && [ "$HAS_NO_APPROVE" -eq 0 ]; then
+  if [ "${DECCY_PI_APPROVE:-0}" = 1 ]; then
+    APPROVE_FLAG="--approve"
+  elif [ "${DECCY_PI_NO_APPROVE:-0}" = 1 ]; then
+    APPROVE_FLAG="--no-approve"
+  elif [ "$PROJECT_MODE" -eq 1 ]; then
+    APPROVE_FLAG="--approve"
+  else
+    APPROVE_FLAG="--no-approve"
+  fi
+fi
+
+NAME_FLAG=""
+if [ "$HAS_NAME" -eq 0 ]; then
+  NAME_FLAG="--name $ROLE"
+fi
+
+BASE_TOOLS="read,grep,find,ls,bash,edit,write,ask_user_question"
+case "$MODE" in
+  orchestrator) TOOLS="$BASE_TOOLS,subagent,get_subagent_result,steer_subagent";;
+  *) TOOLS="$BASE_TOOLS";;
+esac
+
+# Validate the role body early. The extension reads the same file and adds it to
+# the root system prompt; the body is only passed as a user message when the
+# extension is unavailable.
+BODY=$(awk '
+  NR == 1 && $0 !~ /^---[[:space:]]*$/ { body = 1 }
+  NR == 1 && $0 ~ /^---[[:space:]]*$/ { fm = 1; next }
+  fm && $0 ~ /^---[[:space:]]*$/ { fm = 0; body = 1; next }
+  body && !started && $0 ~ /^[[:space:]]*$/ { next }
+  body { started = 1; print }
+' "$ROLE_FILE")
+[ -n "$BODY" ] || {
+  echo "deccy-pi: $ROLE_FILE has no body after its frontmatter" >&2
+  exit 1
+}
+
+export DECCY_ROLE="$ROLE"
+export DECCY_ROLE_FILE="$ROLE_FILE"
+export DECCY_BUNDLE="$BUNDLE"
+export DECCY_BIN="$INVOKED"
+export DECCY_AGENT_ROOT="$AGENT_ROOT"
+export DECCY_SKILLS="$SKILLS_ROOT"
+export DECCY_STATE="$STATE_ROOT"
+
+cd "$WORKDIR"
+
+if [ -f "$EXTENSION" ]; then
+  # shellcheck disable=SC2086
+  exec pi $APPROVE_FLAG --tools "$TOOLS" $NAME_FLAG -e "$EXTENSION" "$@"
+else
+  echo "deccy-pi: warning: $EXTENSION is missing; starting without the role extension" >&2
+  # shellcheck disable=SC2086
+  exec pi $APPROVE_FLAG --tools "$TOOLS" $NAME_FLAG "$BODY" "$@"
+fi
