@@ -75,8 +75,9 @@ deccy validate               # validity, edge resolution, I4 coverage; silent wh
 not check topological order or content custody; the two read-only scripts in the deccy-core skill
 directory's `scripts/` do that. That directory is `~/.config/opencode/skills/deccy-core` for
 OpenCode, `~/.claude/skills/deccy-core` for Claude Code, `~/.agents/skills/deccy-core` for Codex,
-or `<project>/.claude/skills/deccy-core` / `<project>/.opencode/skills/deccy-core` /
-`<project>/.agents/skills/deccy-core` when linked per-project.
+`~/.pi/agent/skills/deccy-core` for Pi, or `<project>/.claude/skills/deccy-core` /
+`<project>/.opencode/skills/deccy-core` / `<project>/.agents/skills/deccy-core` /
+`<project>/.pi/skills/deccy-core` when linked per-project.
 
 ## What the graph is for
 

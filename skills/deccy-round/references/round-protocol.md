@@ -567,8 +567,9 @@ jj log -r 'heads(all())'
 
 `<deccy-round-skill-dir>` is the installed `deccy-round` skill directory:
 `~/.config/opencode/skills/deccy-round` for OpenCode, `~/.claude/skills/deccy-round` for Claude
-Code, `~/.agents/skills/deccy-round` for Codex, or `<project>/.claude/skills/deccy-round` /
-`<project>/.opencode/skills/deccy-round` / `<project>/.agents/skills/deccy-round` when linked
+Code, `~/.agents/skills/deccy-round` for Codex, `~/.pi/agent/skills/deccy-round` for Pi, or
+`<project>/.claude/skills/deccy-round` / `<project>/.opencode/skills/deccy-round` /
+`<project>/.agents/skills/deccy-round` / `<project>/.pi/skills/deccy-round` when linked
 per-project.
 
 The script abandons heads that are empty, undescribed, unbookmarked, not an open workspace's

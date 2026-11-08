@@ -49,7 +49,9 @@ prose after the verdict. Add it once the round is stable.
 OpenCode and Claude Code select these agent files directly. Codex has no `--agent` flag and no
 custom agent type in its V2 spawn surface, so `codex/deccy-codex` starts the two root roles and a
 spawned child binds its role with `deccy-codex register <task_name>`; see
-[`codex/README.md`](codex/README.md).
+[`codex/README.md`](codex/README.md). Pi loads the agent files from `~/.pi/agent/agents/` or
+`<project>/.pi/agents/` and starts a root role with `pi/deccy-pi`; see
+[`pi/README.md`](pi/README.md). All four ports cover the five roles.
 
 ## The round in one screen
 
@@ -110,8 +112,8 @@ jj workspace add "$WS" --name "deccy-<round>-<component>-<handle>" -r <base-chan
 ```
 
 The root is fixed because the agents’ edit permissions are scoped to it. Moving it
-requires editing those permissions in `opencode/agents/`, `claude/hooks/deccy-guard.py` and
-`codex/hooks/deccy-guard.py`.
+requires editing those permissions in `opencode/agents/`, `claude/hooks/deccy-guard.py`,
+`codex/hooks/deccy-guard.py` and `pi/agents/`.
 
 The workspace’s `@` is the draft. Edit in place; never run `jj new` inside it. Run jj from inside
 the workspace (`cd "$WS" && jj ...`), not with `-R` from the trunk.
@@ -162,9 +164,18 @@ See `skills/deccy-round/references/jj-direct.md` for the allowed/forbidden surfa
 
 ## Install
 
-`skills/` is shared at the root. `opencode/` and `claude/` each have their own `agents/`,
-`install.sh` and `link.sh`; `codex/` has `install.sh`, `link.sh`, the `deccy-codex` launcher and
-the five role prompts (its children are spawned natively, so there are no agent files).
+`skills/` is shared at the root. Each integration has its own `link.sh` and `install.sh`:
+
+| Port | Files | Root roles |
+|---|---|---|
+| OpenCode | `opencode/agents/`, `opencode/install.sh`, `opencode/link.sh` | `deccy-plan`, `deccy-orchestrator` |
+| Claude Code | `claude/agents/`, `claude/install.sh`, `claude/link.sh` | same |
+| Codex | `codex/install.sh`, `codex/link.sh`, `codex/deccy-codex`, five role prompts | same |
+| Pi | `pi/agents/`, `pi/extensions/`, `pi/deccy-pi`, `pi/install.sh`, `pi/link.sh` | same |
+
+Codex children are spawned natively, so it ships role prompts rather than agent files. Pi ships the
+five agent files, a role-enforcement extension and a launcher; see [`pi/README.md`](pi/README.md)
+for the locked plugin combination and the extra package/approval rules.
 
 ```sh
 # OpenCode
@@ -173,18 +184,23 @@ curl -fsSL https://raw.githubusercontent.com/edawise/deccy-agent/main/opencode/i
 curl -fsSL https://raw.githubusercontent.com/edawise/deccy-agent/main/claude/install.sh | sh
 # Codex
 curl -fsSL https://raw.githubusercontent.com/edawise/deccy-agent/main/codex/install.sh | sh
+# Pi
+curl -fsSL https://raw.githubusercontent.com/edawise/deccy-agent/main/pi/install.sh | sh
 ```
 
-Each installer clones the bundle to `~/.local/share/deccy/agent/bundle` (shared by all three
+Each installer clones the bundle to `~/.local/share/deccy/agent/bundle` (shared by all four
 integrations) and runs that folder's `link.sh`. The Codex integration requires Codex CLI `0.167.0`
 or newer and `install.sh` refuses an older release; see [`codex/README.md`](codex/README.md) for the
-trust step and upgrade notes. Options: `--project <dir>` for a project-local install,
-`--ref <branch|tag>`, `--from <dir>` to use an existing checkout in place, `--list`, `--uninstall`,
-and `--purge` (also removes the bundle clone once no links into it remain).
-`REPO_URL`, `DEST_BUNDLE`, `DEST_SKILLS` and `DEST_AGENTS` override the default locations; the
-Codex `link.sh` also accepts `DEST_HOOKS` and `DEST_BIN`.
+trust step and upgrade notes. The Pi integration requires Pi `1.0.0` or newer and installs the
+pinned Pi packages (with `--no-ask` to skip the optional question tool and `--no-packages` to skip
+all package checks); see [`pi/README.md`](pi/README.md). Options: `--project <dir>` for a
+project-local install, `--ref <branch|tag>`, `--from <dir>` to use an existing checkout in place,
+`--list`, `--uninstall`, and `--purge` (also removes the bundle clone once no links into it
+remain). `REPO_URL`, `DEST_BUNDLE`, `DEST_SKILLS` and `DEST_AGENTS` override the default locations;
+the Codex `link.sh` also accepts `DEST_HOOKS` and `DEST_BIN`, and the Pi `link.sh` also accepts
+`DEST_EXTENSIONS` and `DEST_BIN`.
 
-From a local clone, run `link.sh` directly (`<tool>` is `opencode`, `claude` or `codex`):
+From a local clone, run `link.sh` directly (`<tool>` is `opencode`, `claude`, `codex` or `pi`):
 
 ```sh
 ./<tool>/link.sh                        # global install
@@ -193,28 +209,61 @@ From a local clone, run `link.sh` directly (`<tool>` is `opencode`, `claude` or 
 ./<tool>/link.sh --uninstall            # remove only symlinks into this bundle
 ```
 
-`link.sh` symlinks the five skill directories from `skills/` and, for OpenCode and Claude Code, the
-five agent files from `<tool>/agents/`. The Codex `link.sh` also links the `deccy-codex` launcher.
-It never copies and refuses to replace files or links it did not create, so `git pull` updates stay
-live without re-linking. The Claude `link.sh` registers (and with `--uninstall` removes) the guard
-hook in Claude Code's settings; the Codex `link.sh` registers it in `hooks.json`. See
-`claude/README.md` and `codex/README.md`. For `--project` in a jj-managed repository, add
-`.opencode/`, `.claude/`, or `.agents/` and `.codex/` to `.gitignore` before linking so jj does not
-snapshot and clean up the symlinks during round operations (or use the global install).
+`link.sh` symlinks the five skill directories from `skills/`; OpenCode, Claude Code and Pi also link
+the five agent files from `<tool>/agents/`. The Codex `link.sh` links the `deccy-codex` launcher and
+registers its hook; the Pi `link.sh` links the `deccy-pi` launcher and the `deccy-role.ts`
+extension, installs the pinned packages and prepares the deccy session root. It never copies and
+refuses to replace files or links it did not create, so `git pull` updates stay live without
+re-linking. The Claude `link.sh` registers (and with `--uninstall` removes) the guard hook in Claude
+Code's settings; the Codex `link.sh` registers it in `hooks.json`. See `claude/README.md`,
+`codex/README.md` and `pi/README.md`. For `--project` in a jj-managed repository, add
+`.opencode/`, `.claude/`, `.agents/` and `.codex/`, or `.pi/`, to `.gitignore` before linking so jj
+does not snapshot and clean up the symlinks during round operations (or use the global install).
 
-See [`opencode/README.md`](opencode/README.md), [`claude/README.md`](claude/README.md) and
-[`codex/README.md`](codex/README.md) for tool-specific paths, invocation, session setup and
-enforcement.
+See [`opencode/README.md`](opencode/README.md), [`claude/README.md`](claude/README.md),
+[`codex/README.md`](codex/README.md) and [`pi/README.md`](pi/README.md) for tool-specific paths,
+invocation, session setup and enforcement.
 
 Use a fixture repository first. This bundle has not been hardened against a large graph (hundreds of
 nodes).
 
 ## Current limitations
 
-- **Subagent cwd.** None of OpenCode’s `subagent`, Claude Code’s `Agent` or Codex’s `spawn_agent`
-  has a `cwd` parameter; children inherit the parent session’s directory. Launch primary sessions
-  from the graph repository root; the role prompts require absolute workspace paths and `cd` for
-  shell commands, and the edit permissions are scoped to the draft/judge roots.
+- **Subagent cwd.** None of OpenCode’s `subagent`, Claude Code’s `Agent`, Codex’s `spawn_agent` or
+  Pi’s `subagent` has a `cwd` parameter; children inherit the parent session’s directory. Launch
+  primary sessions from the graph repository root (or, for a global Pi install, from the neutral
+  deccy root); the role prompts require absolute workspace paths and `cd` for shell commands, and
+  the edit permissions are scoped to the draft/judge roots.
+- **Pi is unguarded without the launcher.** Pi has no built-in permission system, so the port
+  depends on `@gotgenes/pi-permission-system`, and root role policy requires `deccy-pi` (or an
+  explicit `DECCY_ROLE` plus `deccy-role.ts`). A plain `pi` session has no deccy role and only the
+  user's own configuration. The guard is still a policy guard, not a sandbox: it scopes tool calls,
+  not process filesystem access or reads.
+- **Pi project agents override the role.** A project-local `.pi/agents/deccy-*.md` with the same
+  name replaces the global role body and `permission:` block in children, even when the root runs
+  with `--no-approve`. A global Pi install therefore runs from the neutral deccy root; a project
+  install trusts that project's `.pi/` files. Do not run a project-installed root in an untrusted
+  repository.
+- **Pi unknown subagent types.** `@gotgenes/pi-subagents` falls back to `general-purpose` for an
+  unrecognized `subagent_type`; `deccy-role.ts` blocks it, and a global install also disables the
+  fallback agent in the neutral deccy cwd. Both layers are required.
+- **Pi permission frontmatter widens global policy.** Each `deccy-*` agent file sets
+  `external_directory: allow` and `path: allow` so the round can read caches and write under the
+  agent root. That deliberately overrides the user's global policy for those five agent names;
+  per-tool path maps, ordered bash patterns and skill rules still enforce the role boundary.
+- **Pi state roots must be canonical.** Role patterns are `~`-anchored, but the permission system
+  matches canonicalized tool paths. If `$HOME` or the agent root is reached through a symlink
+  (macOS `TMPDIR` is `/var/...` → `/private/var/...`), an allowed write can be denied against
+  `"*"`. Use `pwd -P` when setting `DECCY_AGENT_ROOT`; see
+  [`pi/README.md`](pi/README.md#changing-the-state-root).
+- **Pi packages are pinned and mutually exclusive.** The port is written against
+  `@gotgenes/pi-subagents@25.0.5` and `@gotgenes/pi-permission-system@42.0.0` (optional
+  `@juicesharp/rpiv-ask-user-question@2.15.0`). Do not install `nicobailon/pi-subagents`,
+  `@tintinweb/pi-subagents` or `@gotgenes/pi-subagents-worktrees` alongside them; `pi/link.sh`
+  refuses a conflicting package. Re-run the extension tests and a fixture round after upgrading
+  Pi or a package; see [`pi/README.md`](pi/README.md#upgrading-pi).
+- **Pi `ask_user_question` is optional.** It requires the optional package and an interactive
+  session; in `-p`/JSON runs the planner and orchestrator ask in their final message instead.
 - **Codex role binding.** Codex’s V2 `spawn_agent` cannot select a custom agent type, so children
   are bound to a role by a role-prefixed task name and the `deccy-codex register <task_name>`
   handshake. The guard enforces the binding, but it is not cryptographic identity. Spawned children
