@@ -60,7 +60,8 @@ air-gapped environment.
   `~/.pi/agent/extensions/deccy-role.ts`, and `~/.local/bin/deccy-pi`.
   It also writes `~/.pi/agent/subagents.json` (setting `maxConcurrent` to `6` when it is missing or
   null) and, in the neutral deccy cwd, `~/.local/share/deccy/agent/.pi/agents/general-purpose.md`
-  with `enabled: false`.
+  with `enabled: false`. That file is a second fail-closed layer for an unrecognized
+  `subagent_type`, but it only loads for a session whose cwd is the neutral root — see decision 8.
 - **Project (`--project <dir>`):** `<dir>/.pi/skills`, `<dir>/.pi/agents`, `<dir>/.pi/extensions`,
   `<dir>/.pi/bin/deccy-pi`, and `<dir>/.pi/subagents.json`.
 
@@ -103,9 +104,11 @@ The launcher:
 
 `deccy-pi plan` with no request starts the Pi TUI idle. The extension adds the role body to the
 root system prompt when the first turn starts, so the model sees the role and your request
-together. A request passed on the command line is the first user message. A global install runs Pi
-from the neutral `~/.local/share/deccy/agent` directory; a project install runs from the
-project. Override the cwd with `DECCY_PI_CWD`.
+together. A request passed on the command line is the first user message. A global install starts
+Pi in the directory you launch it from, so the session cwd is the project you are working in; it
+falls back to the neutral `~/.local/share/deccy/agent` directory when that directory carries a
+project-local `.pi/agents/deccy-*.md`, which could override a role file in the in-process children.
+A project install runs from the project. Override the cwd with `DECCY_PI_CWD`.
 
 Extra arguments after the mode are passed through to `pi`. `-p`/`--print` and `--mode json|rpc`
 are non-interactive: they require a request argument or piped stdin and refuse to start otherwise.
@@ -189,7 +192,9 @@ process's filesystem access.
 2. **Unknown subagent types must fail closed.**
    The subagents package falls back to `general-purpose` for an unrecognized `subagent_type`.
    `deccy-role.ts` gates every call to the four worker roles, and a global install also disables the
-   `general-purpose` agent in the neutral deccy cwd. Both layers are required.
+   `general-purpose` agent in the neutral deccy cwd. The gate is the layer that always applies; the
+   disabled file only loads when the session cwd is the neutral root, which is the fallback case in
+   decision 8.
 3. **Package collisions are checked and refused.**
    `pi/link.sh` reads `pi list` and refuses a conflicting subagent package instead of silently
    stacking two `subagent` tools.
@@ -209,12 +214,14 @@ process's filesystem access.
    The launcher lists it in the root `--tools`; the tool exists only when the optional package is
    installed. Without it, or in a `-p`/JSON run, the planner and orchestrator ask in the final
    message and end the turn.
-8. **Global installs run from a neutral cwd; project installs trust the project.**
-   A project-local `.pi/agents/deccy-*.md` overrides the global role body and policy in
-   in-process children, even when the root runs with `--no-approve`. Global installs therefore run
-   Pi from `~/.local/share/deccy/agent`, which has no project `.pi/` layer. Project installs
-   deliberately run from the project and trust that project's `.pi/` files. `DECCY_PI_CWD` is the
-   explicit override.
+8. **Global installs run where you launch them; project installs trust the project.**
+   A global install starts Pi in the invoking directory, so the session cwd is the project you are
+   working in. A project-local `.pi/agents/deccy-*.md` overrides the global role body and policy in
+   in-process children, even when the root runs with `--no-approve`. That directory is therefore not
+   used: the launcher warns and runs Pi from `~/.local/share/deccy/agent` instead, which also keeps
+   the checkout's context files out of the prompt. Project installs deliberately run from the
+   project and trust that project's `.pi/` files. `DECCY_PI_CWD` is the explicit override and skips
+   the check.
 9. **Root role text is a root-only system section, not a user message.**
    `deccy-role.ts` adds the body from `DECCY_ROLE_FILE` as `sections.deccy_role` in
    `before_agent_start`, which Pi renders after `<cwd>`. The interactive TUI therefore starts idle,
@@ -232,7 +239,8 @@ load.
 
 | Install | Default cwd | Approval flag | Effect |
 |---|---|---|---|
-| Global | `~/.local/share/deccy/agent` | `--no-approve` | Ignores any project-local `.pi/` layer; the global role files govern |
+| Global | the invoking directory | `--no-approve` | Ignores any project-local `.pi/` layer; the global role files govern |
+| Global, with a project-local `deccy-*.md` | `~/.local/share/deccy/agent` | `--no-approve` | Warns and falls back; that project would override role files in children |
 | Project | the project | `--approve` | Trusts the project's `.pi/` files, including its agent overrides |
 
 `DECCY_PI_APPROVE=1` and `DECCY_PI_NO_APPROVE=1` override the default. An explicit `--approve` or
@@ -240,8 +248,15 @@ load.
 
 Approval is a trust decision, not a privilege drop: a project install trusts **every** `.pi/` file
 in that project. Do not run a project-installed deccy root in a repository you do not trust. A
-global install avoids the issue by running from the neutral deccy root; the round still works
-because every packet uses absolute workspace paths.
+global install never trusts project-local files, and it starts from the invoking directory only when
+that directory has no `deccy-*.md` agent file to override a role; the round still works from the
+neutral root because every packet uses absolute workspace paths.
+
+One consequence of starting in a project: context files (`AGENTS.md`, `CLAUDE.md`,
+`AGENTS.override.md`) load regardless of project trust, so the launch directory and its parents are
+part of the prompt even with `--no-approve`. Trust-gated resources (`.pi/settings.json`,
+`.pi/mcp.json`, `.pi/extensions`, `.pi/skills`, `.pi/prompts`, `.pi/themes`, `.pi/SYSTEM.md`) are
+still skipped, and the neutral-root fallback keeps an untrusted checkout out of the prompt entirely.
 
 ## Upgrading Pi
 
@@ -319,12 +334,22 @@ rather than replacing a package at a different version.
 - **Guard, not sandbox.** `@gotgenes/pi-permission-system` scopes tool calls. Subagent children
   inherit the parent process's filesystem access, and reads stay open. The prompts forbid reading
   another role's workspace; the permission system cannot enforce a per-role filesystem.
+- **No shell wrapper around a jj/`deccy` command.** The package floors any indirection wrapper
+  (`xargs`, `sudo`, `env`, `time`, `find -exec`, …) from `allow` to `ask` *after* rule resolution,
+  recorded as `<indirection-bash-wrapper>`, so no `permission.bash` pattern can pre-approve one and
+  the inner command's own rule is never read (the Claude and Codex guards peel a wrapper instead).
+  A landing therefore passes its path list as arguments —
+  `[ -n "$PATHS" ] && jj restore --from "$DRAFT" --to @ -- $PATHS` — because
+  `xargs -r jj restore …` prompts on every call. The `s` session grant does not fix it either: a
+  command carrying a `$VAR` word is offered as the whole literal command, so the next spelling asks
+  again. `yoloMode` is the only config-level escape and it is global.
 - **Plain `pi` is unguarded.** The root policy requires `deccy-pi` (or an explicit `DECCY_ROLE`
   plus `DECCY_ROLE_FILE` and the extension). A plain `pi` session has no deccy role and no deccy
   policy.
 - **Project agent override.** A project-local `.pi/agents/deccy-*.md` with the same name replaces
   the global body and `permission:` block in children. Never run a project-installed root in an
-  untrusted repository; use a global install for untrusted or third-party checkouts.
+  untrusted repository; use a global install for untrusted or third-party checkouts. A global
+  install detects that file in the invoking directory and falls back to the neutral root.
 - **Extension loading.** `-e` loads the extension only in the root; the linked copy in the global
   extensions directory loads in children too. Pi dedupes the same real path, so passing `-e` and
   linking it is safe. Do not install a **copy** at a different path and also pass `-e`.
@@ -333,10 +358,16 @@ rather than replacing a package at a different version.
 - **`ask_user_question` is TUI-only in practice.** The optional extension strips the tool when
   `ctx.hasUI` is false, so `-p`/JSON runs must ask in the final message.
 - **Shared cwd.** `subagent` has no `cwd` parameter; the child inherits the root session's
-  directory. A global install runs from the neutral deccy root, so packets must use absolute
-  workspace paths and `cd "<workspace>"`.
+  directory, which for a global install is the directory you launched it from. Packets therefore
+  always use absolute workspace paths and `cd "<workspace>"`.
+- **Project context files.** A global install starts in the invoking directory, so the `AGENTS.md`
+  and `CLAUDE.md` files from that directory and its parents join the prompt even with
+  `--no-approve`; project trust gates settings, extensions, skills and system-prompt files, not
+  context files. Use the `deccy-*.md` fallback (or `DECCY_PI_CWD=$AGENT_ROOT`) in a checkout you do
+  not trust.
 - **Unknown subagent types.** The extension blocks them; the disabled `general-purpose` file is the
-  second layer for global installs. `--disable-builtins` also disables `Explore` and `Plan`.
+  second layer for a session that runs from the neutral root. `--disable-builtins` also disables
+  `Explore` and `Plan`.
 - **Conflicting subagent packages.** The first two alternatives register a competing `subagent`
   tool; the worktrees package conflicts with jj workspaces. `link.sh` refuses to link when it sees
   one, but only for packages visible to `pi list`.

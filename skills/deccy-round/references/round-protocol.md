@@ -183,7 +183,7 @@ CHECK="$ROOT/workspaces/drafts/$ROUND/<component>/gate-check-<handle>"
 mkdir -p "$(dirname "$CHECK")"
 jj workspace add "$CHECK" --name "deccy-$ROUND-<component>-gate-check-<handle>" -r "$TARGET_ID"
 cd "$CHECK"
-printf '%s\n' "$NEW_GATE_PATHS" | xargs -r jj restore --from "$GATE_DRAFT" --to @ --
+[ -n "$NEW_GATE_PATHS" ] && jj restore --from "$GATE_DRAFT" --to @ -- $NEW_GATE_PATHS
 # hand $CHECK to the gate author; it runs <red command> there and does not edit the target
 ```
 
@@ -245,18 +245,24 @@ jj status
 jj diff --summary -r @
 DRAFT=$(jj log -r @ --no-graph -T 'change_id.shortest(8)')
 PATHS=$(jj diff --summary -r @ | sed -n 's/^[A-Z] //p')
-# Prototype path rule: no spaces in draft paths; the xargs landing splits on whitespace.
+# Prototype path rule: no spaces or glob characters in draft paths; the landing expands $PATHS
+# unquoted and splits on whitespace.
+# Land the list as arguments. Never pipe it through a wrapper (`xargs`, `sh -c`, `env`, `time`, …):
+# a wrapper's command is denied on Claude/Codex and floored to a permission prompt on every Pi
+# call, so no role policy can pre-approve it. The `-n` test is not cosmetic — an empty list would
+# make `jj restore --from <id> --to @ --` restore the whole change. An empty list skips the step:
+# stop and find out why it is empty (a landing always has at least one path).
 
 # in the trunk
 cd <repo-root>
 # Snapshot the gate draft first.
 (cd "$WS" && jj status)
 jj new "$EVAL_ID"
-printf '%s\n' "$PATHS" | xargs -r jj restore --from "$DRAFT" --to @ --
+[ -n "$PATHS" ] && jj restore --from "$DRAFT" --to @ -- $PATHS
 # if any path is a new ref, two-step:
 #   deccy record nodes/<EVAL_ID>.json --to "$EVAL_ID"
-#   printf '%s\n' "$NEW_PATHS" | xargs -r deccy record --to "$EVAL_ID"
-printf '%s\n' "$PATHS" | xargs -r deccy record --to "$EVAL_ID"
+#   [ -n "$NEW_PATHS" ] && deccy record $NEW_PATHS --to "$EVAL_ID"
+[ -n "$PATHS" ] && deccy record $PATHS --to "$EVAL_ID"
 jj workspace forget "$NAME"
 jj new "$EVAL_ID"
 # then refresh every other open workspace (§6.0) before continuing
@@ -389,7 +395,7 @@ NAME="deccy-$ROUND-<component>-refine-<handle>"
 mkdir -p "$(dirname "$WS")"
 jj workspace add "$WS" --name "$NAME" -r "$TARGET_ID"
 cd "$WS"
-printf '%s\n' "$GATE_PATHS" | xargs -r jj restore --from "$EVAL_ID" --to @ --
+[ -n "$GATE_PATHS" ] && jj restore --from "$EVAL_ID" --to @ -- $GATE_PATHS
 ```
 
 The gate paths are now in the workspace **for running only**. They are expected to appear in
@@ -455,7 +461,7 @@ Both workspaces' `@` are children of the decision node. The candidate is `@-` in
 
 ```sh
 cd "$JROOT/base"
-printf '%s\n' "$GATE_PATHS" | xargs -r jj restore --from "$EVAL_ID" --to @ --
+[ -n "$GATE_PATHS" ] && jj restore --from "$EVAL_ID" --to @ -- $GATE_PATHS
 <red command>                              # should fail for the gate's reason
 ```
 
@@ -466,8 +472,8 @@ A crash from a broken harness or unrelated fixture is `inconclusive`; report exa
 
 ```sh
 cd "$JROOT/cand"
-printf '%s\n' "$GATE_PATHS" | xargs -r jj restore --from "$EVAL_ID" --to @ --
-printf '%s\n' "$DRAFT_PATHS" | xargs -r jj restore --from "$DRAFT" --to @ --
+[ -n "$GATE_PATHS" ] && jj restore --from "$EVAL_ID" --to @ -- $GATE_PATHS
+[ -n "$DRAFT_PATHS" ] && jj restore --from "$DRAFT" --to @ -- $DRAFT_PATHS
 jj diff --summary -r @                     # test paths must be the gate's, not new edits
 <green command>                            # must pass
 ```
@@ -511,8 +517,8 @@ cd <repo-root>
 # runs in the draft workspace.
 (cd "$WS" && jj status)
 jj new "$TARGET_ID"
-printf '%s\n' "$DRAFT_PATHS" | xargs -r jj restore --from "$DRAFT" --to @ --
-printf '%s\n' "$DRAFT_PATHS" | xargs -r deccy record --to "$TARGET_ID"
+[ -n "$DRAFT_PATHS" ] && jj restore --from "$DRAFT" --to @ -- $DRAFT_PATHS
+[ -n "$DRAFT_PATHS" ] && deccy record $DRAFT_PATHS --to "$TARGET_ID"
 jj workspace forget "$NAME"
 jj new "$TARGET_ID"       # temporary: @ is a child of the target, below its gate
 # then refresh every other open workspace (§6.0) and re-run its gate

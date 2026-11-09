@@ -194,9 +194,9 @@ A `notify_parent` update is one-way; read it and continue.
 
 ## Subagent packets
 
-The `subagent` tool has **no cwd parameter**; a child inherits your session's working directory. For
-a global install that directory is the neutral deccy root, not the repository. Every packet must
-therefore include:
+The `subagent` tool has **no cwd parameter**; a child inherits your session's working directory. That
+directory is wherever the user launched the root session — the neutral deccy root when the launcher
+fell back — so it is not necessarily the graph repository. Every packet must therefore include:
 
 - the **absolute workspace path** and the instruction to `cd` there for all shell commands;
 - the requirement to use **absolute paths** for file edits under that workspace;

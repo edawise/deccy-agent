@@ -37,6 +37,8 @@ decision node is the existing target and the base is its current state:
 
 ```sh
 JROOT="$ROOT/workspaces/judge/$ROUND/<component>/<handle>"
+GATE_PATHS="<gate-paths>"          # the packet's gate paths
+DRAFT_PATHS="<draft-paths>"        # the packet's landable draft paths
 jj workspace add "$JROOT/base" --name "deccy-$ROUND-<component>-<handle>-base" -r "$DECISION_ID"
 jj workspace add "$JROOT/cand" --name "deccy-$ROUND-<component>-<handle>-cand" -r "$DECISION_ID"
 ```
@@ -49,7 +51,7 @@ Another component may record while you set up, rebasing both workspaces. Refresh
 ```sh
 cd "$JROOT/base"
 jj workspace update-stale
-printf '%s\n' "<gate-paths>" | xargs -r jj restore --from "<gate-id>" --to @ --
+[ -n "$GATE_PATHS" ] && jj restore --from "<gate-id>" --to @ -- $GATE_PATHS
 <red command>                  # must fail for the gate's reason
 ```
 
@@ -64,8 +66,8 @@ resolve, is `inconclusive` — report what is broken; do not turn it into a cand
 ```sh
 cd "$JROOT/cand"
 jj workspace update-stale
-printf '%s\n' "<gate-paths>" | xargs -r jj restore --from "<gate-id>" --to @ --
-printf '%s\n' "<draft-paths>" | xargs -r jj restore --from "<draft-change>" --to @ --
+[ -n "$GATE_PATHS" ] && jj restore --from "<gate-id>" --to @ -- $GATE_PATHS
+[ -n "$DRAFT_PATHS" ] && jj restore --from "<draft-change>" --to @ -- $DRAFT_PATHS
 jj diff --summary -r @
 <green command>                # must pass
 ```

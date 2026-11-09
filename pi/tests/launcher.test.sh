@@ -21,6 +21,7 @@ cat > "$T/bin/pi" <<'SH'
 {
   printf 'CALL\n'
   for a do printf 'ARG %s\n' "$a"; done
+  printf 'CWD %s\n' "$PWD"
   printf 'ROLE %s\n' "${DECCY_ROLE:-}"
   printf 'ROLE_FILE %s\n' "${DECCY_ROLE_FILE:-}"
 } >> "$FAKE_PI_LOG"
@@ -31,6 +32,7 @@ chmod +x "$T/bin/pi"
 export PATH="$T/bin:$PATH"
 export HOME="$T/home" PI_AGENT_DIR="$T/agent" PI_CODING_AGENT_DIR="$T/agent"
 export DECCY_AGENT_ROOT="$T/root" FAKE_PI_LOG="$F"
+unset DECCY_PI_CWD DECCY_PI_APPROVE DECCY_PI_NO_APPROVE DECCY_SKILLS DECCY_STATE
 
 trap 'rm -rf "$T"' EXIT HUP INT TERM
 
@@ -50,6 +52,14 @@ called() { grep -q '^CALL$' "$F"; }
 has_arg() { grep -qxF "ARG $1" "$F"; }
 no_body() { ! grep -qF 'You plan **one deccy layer**' "$F"; }
 role_file_ok() { grep -qxF "ROLE_FILE $BUNDLE/pi/agents/deccy-plan.md" "$F"; }
+cwd_is() { grep -qxF "CWD $1" "$F"; }
+# Run the launcher from a given directory.
+run_in() {
+  dir=$1
+  shift
+  reset
+  (cd "$dir" && "$LAUNCHER" "$@" > "$T/out" 2> "$T/err")
+}
 
 # Run the launcher in a real pseudo-terminal. `script` gives it a tty stdin.
 pty_run() {
@@ -168,6 +178,43 @@ if [ "$code" -eq 0 ] && has_arg --help && no_body; then
   ok "--help is passed through without a prompt check"
 else
   no "--help is passed through without a prompt check" "exit=$code; $(head -3 "$T/err")"
+fi
+
+# --- working directory -------------------------------------------------------
+mkdir -p "$T/work"
+run_in "$T/work" plan
+code=$?
+if [ "$code" -eq 0 ] && cwd_is "$T/work"; then
+  ok "a global install starts Pi in the invoking directory"
+else
+  no "a global install starts Pi in the invoking directory" \
+    "exit=$code; $(grep '^CWD' "$F")"
+fi
+
+mkdir -p "$T/work/.pi/agents"
+: > "$T/work/.pi/agents/deccy-drafter.md"
+run_in "$T/work" plan
+code=$?
+if [ "$code" -eq 0 ] && cwd_is "$T/root"; then
+  ok "a project-local deccy role file falls back to the neutral root"
+else
+  no "a project-local deccy role file falls back to the neutral root" \
+    "exit=$code; $(grep '^CWD' "$F")"
+fi
+if grep -q 'can override a deccy role file' "$T/err"; then
+  ok "the fallback explains the role-file override"
+else
+  no "the fallback explains the role-file override" "$(head -3 "$T/err")"
+fi
+rm -rf "$T/work/.pi"
+
+reset
+(cd "$T/work" && DECCY_PI_CWD="$T/override" "$LAUNCHER" plan > "$T/out" 2> "$T/err")
+code=$?
+if [ "$code" -eq 0 ] && cwd_is "$T/override"; then
+  ok "DECCY_PI_CWD overrides the invoking directory"
+else
+  no "DECCY_PI_CWD overrides the invoking directory" "exit=$code; $(grep '^CWD' "$F")"
 fi
 
 printf '\n%d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skip"

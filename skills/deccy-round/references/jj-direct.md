@@ -82,8 +82,8 @@ The orchestrator, and only the orchestrator, may use these:
   trunk.
 - Renames in a draft — `jj diff --summary` reports a rename as one `{old => new}` field, and the
   landing path set becomes ambiguous. Use add + delete.
-- Paths with spaces in a draft — the prototype’s `xargs` landing splits on whitespace. Keep draft
-  paths simple; the final CLI will handle arbitrary paths.
+- Paths with spaces or glob characters in a draft — the landing expands `$PATHS` unquoted, so it
+  splits on whitespace. Keep draft paths simple; the final CLI will handle arbitrary paths.
 - Workspaces inside the repository (including `.deccy/workspaces/`) — the trunk working copy sees
   their files, and jj reports paths like `.deccy/workspaces/.../f.txt` instead of `f.txt`.
 
@@ -133,7 +133,7 @@ A refine edits an existing target, so base the workspace at the **target**, not 
 ```sh
 jj workspace add "$WS" --name "$NAME" -r "$TARGET_ID"
 cd "$WS"
-printf '%s\n' "$GATE_PATHS" | xargs -r jj restore --from "$EVAL_ID" --to @ --
+[ -n "$GATE_PATHS" ] && jj restore --from "$EVAL_ID" --to @ -- $GATE_PATHS
 ```
 
 The target’s current node and refs are in `@-`; the gate test is restored into `@` for running
@@ -158,11 +158,16 @@ the landable set from the section above:
 
 ```sh
 jj new "$TARGET"
-printf '%s\n' "$PATHS" | xargs -r jj restore --from "$DRAFT" --to @ --
-printf '%s\n' "$PATHS" | xargs -r deccy record --to "$TARGET"
+[ -n "$PATHS" ] && jj restore --from "$DRAFT" --to @ -- $PATHS
+[ -n "$PATHS" ] && deccy record $PATHS --to "$TARGET"
 jj workspace forget "$NAME"
 jj new "$TARGET"
 ```
+
+The list travels as arguments, never through a wrapper (`xargs`, `sh -c`, `env`, …). Claude and
+Codex deny a wrapper's command; Pi floors any wrapper to a permission prompt on *every* call, so no
+role policy can pre-approve it. The `[ -n ... ]` test is not cosmetic: an empty list would make
+`jj restore --from <id> --to @ --` restore the whole change.
 
 `deccy record` runs `jj squash --into <target>` internally, so the graph write stays in the CLI.
 `jj workspace forget` removes the workspace, but not reliably its working-copy commit: a draft

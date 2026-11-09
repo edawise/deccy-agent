@@ -342,7 +342,7 @@ print_state() {
     echo "package scope:  $PROJECT_DIR (project)"
   else
     echo "Pi agent dir:   $PI_DIR"
-    echo "neutral cwd:    $AGENT_ROOT"
+    echo "state root:     $AGENT_ROOT"
   fi
   echo "skills:         $DEST_SKILLS"
   echo "agents:         $DEST_AGENTS"
@@ -435,7 +435,7 @@ case "$MODE" in
       echo "project install: Pi runs from $PROJECT_DIR and trusts this project's .pi/ files."
       echo "add .pi/ to .gitignore so jj does not snapshot the links."
     else
-      echo "global install: deccy-pi runs Pi from $AGENT_ROOT (neutral cwd)."
+      echo "global install: deccy-pi runs Pi from the launch directory (falls back to $AGENT_ROOT)."
     fi
     echo "plain 'pi' sessions are unguarded; start a role with:  deccy-pi plan|orchestrator"
     echo "restart any running Pi sessions to pick up the links and packages."

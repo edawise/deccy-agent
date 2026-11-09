@@ -52,7 +52,7 @@ its run.
 ```sh
 cd "$JROOT/base"
 jj workspace update-stale
-printf '%s\n' "$GATE_PATHS" | xargs -r jj restore --from "$EVAL_ID" --to @ --
+[ -n "$GATE_PATHS" ] && jj restore --from "$EVAL_ID" --to @ -- $GATE_PATHS
 <red command>
 ```
 
@@ -68,8 +68,8 @@ turn it into a candidate rejection.
 ```sh
 cd "$JROOT/cand"
 jj workspace update-stale
-printf '%s\n' "$GATE_PATHS" | xargs -r jj restore --from "$EVAL_ID" --to @ --
-printf '%s\n' "$DRAFT_PATHS" | xargs -r jj restore --from "$DRAFT" --to @ --
+[ -n "$GATE_PATHS" ] && jj restore --from "$EVAL_ID" --to @ -- $GATE_PATHS
+[ -n "$DRAFT_PATHS" ] && jj restore --from "$DRAFT" --to @ -- $DRAFT_PATHS
 jj diff --summary -r @
 <green command>
 ```

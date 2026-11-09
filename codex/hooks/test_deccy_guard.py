@@ -591,6 +591,8 @@ class OrchestratorShell(Base):
                         "jj workspace forget n", "cd /w && jj workspace update-stale",
                         "jj restore --from abc --to @ -- src/a.py",
                         "printf '%s\\n' a b | xargs -r jj restore --from abc --to @ --",
+                        '[ -n "$PATHS" ] && jj restore --from "$D" --to @ -- $PATHS',
+                        '[ -n "$PATHS" ] && deccy record $PATHS --to "$TARGET"',
                         "jj describe -m 'summary' abc",
                         "jj rebase -s abc -B def",
                         "~/.claude/skills/deccy-round/scripts/abandon-empty-heads.sh --dry-run",
@@ -650,6 +652,8 @@ class JudgeShell(Base):
         for command in ("jj workspace add /j/base --name n -r abc",
                         "jj workspace forget n", "cd /j/base && jj workspace update-stale",
                         "printf '%s\\n' t.py | xargs -r jj restore --from g --to @ --",
+                        '[ -n "$GATE_PATHS" ] && jj restore --from g --to @ -- $GATE_PATHS',
+                        'jj restore --from d --to @ -- $GATE_PATHS $DRAFT_PATHS',
                         "jj restore --from d --to @ -- src/a.py", "pytest -q > /dev/null",
                         "pytest -q 2>/dev/null", "jj diff --summary"):
             with self.subTest(command=command):

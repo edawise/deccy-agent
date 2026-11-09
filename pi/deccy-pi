@@ -15,6 +15,12 @@
 # Non-interactive mode (-p/--print, or --mode json|rpc) refuses to start with
 # no prompt and no piped stdin.
 #
+# A global install starts Pi in the directory you launch it from, so the session
+# cwd is the project you are working in. If that directory carries a
+# project-local .pi/agents/deccy-*.md, it could override a role file in the
+# in-process children, so the launcher warns and uses the neutral state root. A
+# project install starts Pi in the project.
+#
 # Environment:
 #   DECCY_AGENT_ROOT          deccy state root (default: ~/.local/share/deccy/agent)
 #   DECCY_SKILLS              skills root override
@@ -41,7 +47,7 @@ HERE=$(CDPATH= cd -- "$(dirname -- "$SELF")" && pwd)
 BUNDLE=$(CDPATH= cd -- "$HERE/.." && pwd)
 
 usage() {
-  sed -n '2,25p' "$SELF"
+  sed -n '2,31p' "$SELF"
 }
 
 if [ $# -eq 0 ]; then
@@ -146,7 +152,17 @@ if [ -n "${DECCY_PI_CWD:-}" ]; then
 elif [ "$PROJECT_MODE" -eq 1 ]; then
   WORKDIR=$PROJECT_ROOT
 else
-  WORKDIR=$AGENT_ROOT
+  # A global install starts Pi where the user launched it. A project-local
+  # `.pi/agents/deccy-*.md` overrides a role file in in-process children even
+  # with `--no-approve`, so that directory falls back to the neutral root.
+  WORKDIR=$(pwd)
+  for f in "$WORKDIR"/.pi/agents/deccy-*.md; do
+    [ -f "$f" ] || continue
+    echo "deccy-pi: warning: $f can override a deccy role file" >&2
+    echo "  running from $AGENT_ROOT instead; DECCY_PI_CWD=$WORKDIR overrides" >&2
+    WORKDIR=$AGENT_ROOT
+    break
+  done
 fi
 
 if [ -n "${DECCY_SKILLS:-}" ]; then
@@ -162,8 +178,8 @@ STATE_ROOT="${DECCY_STATE:-$AGENT_ROOT/state}"
 mkdir -p "$WORKDIR" "$AGENT_ROOT/plan" "$AGENT_ROOT/rounds" \
   "$AGENT_ROOT/workspaces/drafts" "$AGENT_ROOT/workspaces/judge" "$STATE_ROOT"
 
-# Approval defaults: a project install owns the project's .pi/ layer; a global
-# install runs from the neutral root and ignores project-local files.
+# Approval defaults: a project install trusts its own .pi/ layer; a global
+# install takes only the explicit --approve/DECCY_PI_APPROVE opt-in.
 HAS_APPROVE=0
 HAS_NO_APPROVE=0
 HAS_NAME=0

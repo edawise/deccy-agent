@@ -127,11 +127,16 @@ PATHS=$(cd "$WS" && jj diff --summary -r @ | sed -n 's/^[A-Z] //p')
 
 cd <repo-root>
 jj new <target>
-printf '%s\n' "$PATHS" | xargs -r jj restore --from "$DRAFT" --to @ --
-printf '%s\n' "$PATHS" | xargs -r deccy record --to <target>
+[ -n "$PATHS" ] && jj restore --from "$DRAFT" --to @ -- $PATHS
+[ -n "$PATHS" ] && deccy record $PATHS --to <target>
 jj workspace forget "deccy-<round>-<component>-<handle>"
 jj new <target>
 ```
+
+The path list travels as arguments. Never pipe it through a wrapper (`xargs`, `sh -c`, `env`, …):
+Claude and Codex deny a wrapper's command, and Pi floors any wrapper to a permission prompt on every
+call, so it cannot be pre-approved by the role policy. The `[ -n ... ]` test is not cosmetic — an
+empty list would turn `jj restore --from <id> --to @ --` into a restore of the whole change.
 
 For a **refine**, base the workspace at the existing target and restore the gate paths for
 running; land only the landable set:
@@ -139,7 +144,7 @@ running; land only the landable set:
 ```sh
 jj workspace add "$WS" --name "deccy-<round>-<component>-<handle>" -r <target-id>
 cd "$WS"
-printf '%s\n' "$GATE_PATHS" | xargs -r jj restore --from "$EVAL_ID" --to @ --
+[ -n "$GATE_PATHS" ] && jj restore --from "$EVAL_ID" --to @ -- $GATE_PATHS
 # edit the existing node + refs; run the gate
 PATHS=$(jj diff --summary -r @ | sed -n 's/^[A-Z] //p')
 LANDABLE_PATHS=$(printf '%s\n' "$PATHS" | grep -vxF -f <(printf '%s\n' "$GATE_PATHS" | sed '/^$/d') || true)
@@ -231,9 +236,10 @@ nodes).
 
 - **Subagent cwd.** None of OpenCode’s `subagent`, Claude Code’s `Agent`, Codex’s `spawn_agent` or
   Pi’s `subagent` has a `cwd` parameter; children inherit the parent session’s directory. Launch
-  primary sessions from the graph repository root (or, for a global Pi install, from the neutral
-  deccy root); the role prompts require absolute workspace paths and `cd` for shell commands, and
-  the edit permissions are scoped to the draft/judge roots.
+  primary sessions from the graph repository root (a global Pi install starts in the directory you
+  launch it from, and falls back to the neutral deccy root when that directory holds a
+  `deccy-*.md` agent file); the role prompts require absolute workspace paths and `cd` for shell
+  commands, and the edit permissions are scoped to the draft/judge roots.
 - **Pi is unguarded without the launcher.** Pi has no built-in permission system, so the port
   depends on `@gotgenes/pi-permission-system`, and root role policy requires `deccy-pi` (or an
   explicit `DECCY_ROLE` plus `deccy-role.ts`). A plain `pi` session has no deccy role and only the
@@ -241,12 +247,13 @@ nodes).
   not process filesystem access or reads.
 - **Pi project agents override the role.** A project-local `.pi/agents/deccy-*.md` with the same
   name replaces the global role body and `permission:` block in children, even when the root runs
-  with `--no-approve`. A global Pi install therefore runs from the neutral deccy root; a project
-  install trusts that project's `.pi/` files. Do not run a project-installed root in an untrusted
-  repository.
+  with `--no-approve`. A global Pi install therefore warns and falls back to the neutral deccy root
+  when it finds such a file in the launch directory; a project install trusts that project's `.pi/`
+  files. Do not run a project-installed root in an untrusted repository.
 - **Pi unknown subagent types.** `@gotgenes/pi-subagents` falls back to `general-purpose` for an
   unrecognized `subagent_type`; `deccy-role.ts` blocks it, and a global install also disables the
-  fallback agent in the neutral deccy cwd. Both layers are required.
+  fallback agent in the neutral deccy cwd, which covers a session that runs from there. The
+  extension gate is the layer that always applies.
 - **Pi permission frontmatter widens global policy.** Each `deccy-*` agent file sets
   `external_directory: allow` and `path: allow` so the round can read caches and write under the
   agent root. That deliberately overrides the user's global policy for those five agent names;

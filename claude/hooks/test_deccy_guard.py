@@ -104,6 +104,9 @@ class Orchestrator(Base):
                   "cd /w && jj workspace update-stale",
                   "jj restore --from abc --to @ -- src/a.py",
                   "printf '%s\\n' a b | xargs -r jj restore --from abc --to @ --",
+                  '[ -n "$PATHS" ] && jj restore --from "$D" --to @ -- $PATHS',
+                  '[ -n "$PATHS" ] && deccy record $PATHS --to "$TARGET"',
+                  '[ -n "$PATHS" ] && jj restore --from "$D" --to @ -- $PATHS && jj new abc',
                   "jj describe -m 'summary' abc",
                   "jj rebase -s abc -B def",
                   "~/.claude/skills/deccy-round/scripts/abandon-empty-heads.sh --dry-run",
@@ -174,6 +177,8 @@ class Judge(Base):
         for c in ("jj workspace add /j/base --name n -r abc", "jj workspace forget n",
                   "cd /j/base && jj workspace update-stale",
                   "printf '%s\\n' t.py | xargs -r jj restore --from g --to @ --",
+                  '[ -n "$GATE_PATHS" ] && jj restore --from g --to @ -- $GATE_PATHS',
+                  'jj restore --from d --to @ -- $GATE_PATHS $DRAFT_PATHS',
                   "jj restore --from d --to @ -- src/a.py", "pytest -q > /dev/null"):
             self.assertAllowed(self.bash(self.R, c))
         for c in ("jj restore src/a.py", "jj new", "deccy record x", "jj describe -m x"):
