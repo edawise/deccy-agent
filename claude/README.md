@@ -95,9 +95,14 @@ Permission syntax notes:
 | tool availability | `tools:` in `claude/agents/*.md`, applied to `--agent` sessions and subagents |
 | `skill` allow list | guard blocks `Skill` calls outside the role's two skills |
 | `subagent` allow list | `Agent(...)` in the orchestrator's `tools:`, plus the guard |
-| `edit` / `write` paths | guard blocks `Edit`/`Write`/`MultiEdit`/`NotebookEdit` outside the role's paths (`plan` → `plan/*`, `orchestrator` → `rounds/**` + `plan/*`, `gate-author` and `drafter` → `workspaces/drafts/**`, `judge` → `workspaces/judge/**`) |
+| `edit` / `write` paths | guard blocks `Edit`/`Write`/`MultiEdit`/`NotebookEdit` outside the role's paths (`plan` → `plan/*`, `orchestrator` → `rounds/**` + `plan/*`, `gate-author` and `drafter` → the CLI draft root `~/.local/share/deccy/workspaces/**` plus the legacy `workspaces/drafts/**`, `judge` → `~/.local/share/deccy/workspaces/**` plus the legacy `workspaces/judge/**`) |
 | `shell` deny/allow patterns | guard evaluates the same patterns in order (last match wins) |
 | `question` (planner) | `AskUserQuestion` in the planner's `tools:` (interactive sessions) |
+
+The role prompts require **deccy-cli 0.2.2 or newer** for `new --evaluates`, `draft`, `drafts`,
+`discard` and `record --from`. The guard allows the draft verbs per role: the orchestrator opens,
+lands and discards round drafts; the judge may open and discard its own clean-room drafts; the gate
+author and drafter may not run them.
 
 `claude/hooks/deccy-guard.py` reads `agent_type` from the hook input (set for both
 `claude --agent deccy-<role>` sessions and `deccy-*` subagents) and passes any other caller through
@@ -119,7 +124,8 @@ Claude-specific caveats:
 
 - **Guard, not sandbox.** As with OpenCode's pattern list, an unlisted interpreter or write path
   can bypass shell pattern matching; the prose "never" rules still apply, and drafters are scoped
-  to `workspaces/drafts/**` rather than per-unit subdirectories.
+  to the CLI draft root rather than per-unit subdirectories. The root is fixed by
+  `deccy draft`; the guard also accepts `DECCY_DRAFT_ROOT` for a test or a relocated checkout.
 - **Settings hook required.** Frontmatter hooks in agent files do not fire (tested on Claude Code
   2.1.319), so sessions started without the settings file (e.g. excluded via `--setting-sources`)
   enforce only `tools:`.

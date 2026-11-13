@@ -1,10 +1,12 @@
 #!/bin/sh
-# Move the working copy above the round's highest landed node change.
+# Move the working copy above the round's highest node change.
 #
-# A landed decision's gate is its child, so a landing's `jj new <target>` leaves
-# the gate as a sibling head rather than above it. This script finds the node
-# change (a change carrying nodes/<id>.json) that no other node change descends
-# from, and starts a new empty change above it. It refuses a fork of two node
+# Run it after the skeleton pass (so `deccy draft` defaults its `edit` to the
+# empty round change, not a node) and again after the last landing (a landed
+# decision's gate is its child, so a landing's `jj new <target>` leaves the gate
+# as a sibling). This script finds the node change (a change carrying
+# nodes/<id>.json) that no other node change descends from, and starts a new
+# empty change above it. It refuses a fork of two node
 # changes and any repository without a node change.
 #
 # Usage: set-round-tip.sh [--dry-run]
@@ -53,7 +55,14 @@ if [ -z "$top" ]; then
   exit 1
 fi
 
-if [ -n "$(jj log -r "$top::@" --no-graph -T 'change_id' 2>/dev/null)" ]; then
+# "Above top" means @ is a strict descendant of top. @ == top is not above it: the
+# skeleton pass leaves @ on the last skeleton, and a landing can leave @ on the target.
+at=$(jj log -r @ --no-graph -T 'change_id.shortest(8)' 2>/dev/null) || {
+  echo "set-round-tip: cannot read the working copy" >&2
+  exit 2
+}
+if [ "$at" != "$top" ] && \
+   [ -n "$(jj log -r "$top::@-" --no-graph -T 'change_id' 2>/dev/null)" ]; then
   echo "set-round-tip: working copy is already above $top"
   exit 0
 fi

@@ -29,11 +29,20 @@ permissions:
   - action: edit
     resource: "~/.local/share/deccy/agent/workspaces/judge/**"
     effect: allow
+  - action: edit
+    resource: "~/.local/share/deccy/workspaces/**"
+    effect: allow
   - action: write
     resource: "~/.local/share/deccy/agent/workspaces/judge/**"
     effect: allow
+  - action: write
+    resource: "~/.local/share/deccy/workspaces/**"
+    effect: allow
   - action: external_directory
     resource: "~/.local/share/deccy/agent/**"
+    effect: allow
+  - action: external_directory
+    resource: "~/.local/share/deccy/workspaces/**"
     effect: allow
   - action: shell
     resource: "deccy init *"
@@ -44,6 +53,16 @@ permissions:
   - action: shell
     resource: "deccy record *"
     effect: deny
+  # The judge may open and discard only its own clean-room drafts, never land one.
+  - action: shell
+    resource: "deccy draft *"
+    effect: allow
+  - action: shell
+    resource: "deccy drafts"
+    effect: allow
+  - action: shell
+    resource: "deccy discard *"
+    effect: allow
   - action: shell
     resource: "deccy remove *"
     effect: deny
@@ -89,6 +108,10 @@ permissions:
   - action: shell
     resource: "jj restore --from * --into @ -- *"
     effect: allow
+  # `deccy draft` owns workspace creation; the judge must not create one by hand.
+  - action: shell
+    resource: "jj workspace add *"
+    effect: deny
   - action: shell
     resource: "git add *"
     effect: deny
@@ -112,31 +135,37 @@ author and the user own whether a weak gate is amended.
 ## Packet
 
 The orchestrator gives you the mode (`new`/`refine`), decision id (the existing target for a
-refine), gate id/hash/paths, gate commands, candidate handle, draft change id and **landable** draft
-paths (and any alternatives). If the hash, paths or commands are missing, stop; a moving target
-cannot be judged. For a refine, the drafter’s workspace also contains gate paths for running; they
-are not part of the candidate.
+refine), gate id/hash/paths, gate commands, candidate handle, draft change id, **landable** draft
+paths, and the **round edit** id for `deccy draft --edit` (and any alternatives). If the hash, paths
+or commands are missing, stop; a moving target cannot be judged. The drafter's workspace also
+contains the restored gate paths (new unit and refine alike); they are not part of the candidate.
 
 ## Clean room
 
-Create two workspaces at the **decision node**, not in the drafter’s workspace. For a refine, the
-decision node is the existing target and the base is its current state:
+Open two clean drafts at the **decision node**, not in the drafter's workspace. For a refine, the
+decision node is the existing target and the base is its current state. Open them from the trunk:
 
 ```sh
-JROOT="$ROOT/workspaces/judge/$ROUND/<component>/<handle>"
 GATE_PATHS="<gate-paths>"          # the packet's gate paths
 DRAFT_PATHS="<draft-paths>"        # the packet's landable draft paths
-jj workspace add "$JROOT/base" --name "deccy-$ROUND-<component>-<handle>-base" -r "$DECISION_ID"
-jj workspace add "$JROOT/cand" --name "deccy-$ROUND-<component>-<handle>-cand" -r "$DECISION_ID"
+read -r BASE_HANDLE BASE_WS <<EOF
+$(deccy draft "$DECISION_ID" --edit "$ROUND_EDIT")
+EOF
+read -r CAND_HANDLE CAND_WS <<EOF
+$(deccy draft "$DECISION_ID" --edit "$ROUND_EDIT")
+EOF
 ```
 
-Another component may record while you set up, rebasing both workspaces. Refresh each one
-(`jj workspace update-stale`, then `jj status`) immediately before its run.
+Both drafts' `@` are children of the decision. A new evaluation follows the decision after the
+restack; an amended existing one is normally an ancestor. Restore the frozen gate paths from
+`$EVAL_ID` into both drafts uniformly (a no-op when they are already present). Another component may
+land while you set up, so refresh each one (`jj workspace update-stale`, then `jj status`)
+immediately before its run. Check `deccy drafts`; a `drifted` open row is a stop.
 
 ### Base
 
 ```sh
-cd "$JROOT/base"
+cd "$BASE_WS"
 jj workspace update-stale
 [ -n "$GATE_PATHS" ] && jj restore --from "<gate-id>" --to @ -- $GATE_PATHS
 <red command>                  # must fail for the gate's reason
@@ -151,7 +180,7 @@ resolve, is `inconclusive` — report what is broken; do not turn it into a cand
 ### Candidate
 
 ```sh
-cd "$JROOT/cand"
+cd "$CAND_WS"
 jj workspace update-stale
 [ -n "$GATE_PATHS" ] && jj restore --from "<gate-id>" --to @ -- $GATE_PATHS
 [ -n "$DRAFT_PATHS" ] && jj restore --from "<draft-change>" --to @ -- $DRAFT_PATHS
@@ -160,14 +189,22 @@ jj diff --summary -r @
 ```
 
 Check that the draft paths contain no gate path; if they do, the draft edited the gate:
-**gate integrity: broken** — and **reject**. For a refine, the packet’s draft paths are the
-landable set only; the gate paths in the drafter’s workspace are expected and are not candidate
-edits. Recompute the gate hash; a mismatch is **gate integrity: broken**. Then try at least one
+**gate integrity: broken** — and **reject**. The packet's draft paths are the landable set only (both modes); the gate paths in the drafter's
+workspace are expected and are not candidate edits. Recompute the gate hash; a mismatch is **gate integrity: broken**. Then try at least one
 counterexample or mutation: a boundary/negative case, a deliberately wrong candidate, or a copy of
 the base. If the gate misses it, record **gate strength: weak**; do not reject the candidate on
 that basis.
 
-Clean up both workspaces with `jj workspace forget`; do not record anything.
+Discard both drafts from the trunk before the orchestrator lands: an open judge draft names the
+same node, and a stale one would refuse the landing.
+
+```sh
+cd <repo-root>
+deccy discard "$BASE_HANDLE" "$CAND_HANDLE"
+```
+
+`deccy discard` abandons each draft's change, forgets its workspace, removes its directory and
+removes the record. Never run `deccy record`; never hand-edit `.deccy/work/*.json`.
 
 ## Verdicts
 
@@ -193,11 +230,14 @@ Never write the verdict into a node (I5).
 ## Never
 
 - No graph writes: no `deccy new/record/remove/undo/redo`.
+- No draft lifecycle beyond your own clean-room drafts: `deccy draft` / `deccy discard` only, and
+  only for the base/candidate you are judging. Never `jj workspace add`; never hand-edit
+  `.deccy/work/*.json`.
 - No jj graph surgery: no `new`, `squash`, `rebase`, `describe`, `abandon`, `op`, `split`,
-  `metaedit`, `undo`. The only raw jj writes are `workspace add/forget/update-stale` and
+  `metaedit`, `undo`. The only raw jj writes are `workspace update-stale` and
   `restore --from <gate|draft> --to @`.
-- No edits to the candidate workspace, the gate, or the repo working copy. Logs go under the
-  judge workspace only.
+- No edits to the candidate workspace, the gate, or the repo working copy. Logs go under your own
+  judge draft only.
 - No inventing a stronger gate after seeing the candidate; report a weak gate as `gate-weak`
   advice, not a veto.
 - No comparing alternatives before each has its own verdict.

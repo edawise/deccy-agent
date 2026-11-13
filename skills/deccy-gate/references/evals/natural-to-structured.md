@@ -8,8 +8,9 @@ prerequisite.
 This check is copied verbatim as the evaluation criterion; findings name elements at
 check time:
 
-1. License: no element of the elaboration contradicts the parent. Fail on any
-   contradicting element — name the element.
+1. Non-contradiction and non-re-decision: no element of the elaboration contradicts
+   or re-decides the parent. Fail on any contradicting or re-decided element — name
+   the element.
 
 ## Forbidden
 

@@ -17,9 +17,12 @@ class Base(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = os.path.realpath(self.tmp.name)
         os.environ["DECCY_GUARD_ROOT"] = self.root
+        self.drafts = os.path.join(self.root, ".local", "share", "deccy", "workspaces")
+        os.environ["DECCY_DRAFT_ROOT"] = self.drafts
 
     def tearDown(self):
         os.environ.pop("DECCY_GUARD_ROOT", None)
+        os.environ.pop("DECCY_DRAFT_ROOT", None)
         self.tmp.cleanup()
 
     def run_tool(self, role, tool, **tool_input):
@@ -100,13 +103,15 @@ class Orchestrator(Base):
 
     def test_protocol_commands_allowed(self):
         for c in ("deccy new --on abc -m 'x'", "deccy record nodes/x.json",
-                  "jj new abc", "jj workspace add /w --name n -r abc", "jj workspace forget n",
+                  "deccy new --on abc --evaluates def -m 'gate x'",
+                  "deccy draft abc --edit def", "deccy drafts",
+                  "deccy discard h1 h2", "deccy record --from h1 --to abc",
+                  "jj new abc", "jj workspace forget n",
                   "cd /w && jj workspace update-stale",
                   "jj restore --from abc --to @ -- src/a.py",
                   "printf '%s\\n' a b | xargs -r jj restore --from abc --to @ --",
                   '[ -n "$PATHS" ] && jj restore --from "$D" --to @ -- $PATHS',
-                  '[ -n "$PATHS" ] && deccy record $PATHS --to "$TARGET"',
-                  '[ -n "$PATHS" ] && jj restore --from "$D" --to @ -- $PATHS && jj new abc',
+                  '[ -n "$PATHS" ] && deccy record --from "$H" --to "$TARGET"',
                   "jj describe -m 'summary' abc",
                   "jj rebase -s abc -B def",
                   "~/.claude/skills/deccy-round/scripts/abandon-empty-heads.sh --dry-run",
@@ -118,6 +123,7 @@ class Orchestrator(Base):
         for c in ("jj new -A abc", "jj squash", "jj describe abc",
                   "jj abandon abc", "jj op restore x", "jj restore src/a.py", "jj undo",
                   "deccy remove x", "deccy init", "git push", "rm -rf x", "mv a b",
+                  "jj workspace add /w --name n -r abc",
                   "sh -c 'jj squash'", "xargs jj abandon"):
             self.assertBlocked(self.bash(self.R, c))
 
@@ -145,6 +151,8 @@ class Drafter(Base):
     def test_workspace_only(self):
         self.assertAllowed(self.run_tool(self.R, "Edit",
                                          file_path=f"{self.root}/workspaces/drafts/r/c/u/src/a.py"))
+        self.assertAllowed(self.run_tool(self.R, "Edit",
+                                         file_path=f"{self.drafts}/ns/handle/src/a.py"))
         self.assertBlocked(self.run_tool(self.R, "Edit",
                                          file_path=f"{self.root}/workspaces/judge/r/c/u/src/a.py"))
         self.assertBlocked(self.run_tool(self.R, "Write", file_path="/etc/x"))
@@ -154,7 +162,8 @@ class Drafter(Base):
                   "jj workspace update-stale", "cd /w && jj workspace update-stale",
                   "jj restore --from a --to @ -- x", "jj restore --from g --into @ -- y"):
             self.assertAllowed(self.bash(self.R, c))
-        for c in ("jj new", "jj restore src/a.py", "deccy record x", "git commit -m x"):
+        for c in ("jj new", "jj restore src/a.py", "deccy record x", "git commit -m x",
+                  "deccy draft abc --edit def", "deccy discard h1"):
             self.assertBlocked(self.bash(self.R, c))
 
 
@@ -166,7 +175,8 @@ class GateAuthor(Drafter):
         for c in ("cd /w && pytest -q", "jj st", "jj workspace update-stale"):
             self.assertAllowed(self.bash(self.R, c))
         for c in ("jj new", "jj restore --from a --to @ -- x", "jj restore src/a.py",
-                  "deccy record x", "git commit -m x"):
+                  "deccy record x", "git commit -m x",
+                  "deccy draft abc --edit def", "deccy discard h1"):
             self.assertBlocked(self.bash(self.R, c))
 
 
@@ -174,19 +184,22 @@ class Judge(Base):
     R = "deccy-judge"
 
     def test_clean_room(self):
-        for c in ("jj workspace add /j/base --name n -r abc", "jj workspace forget n",
+        for c in ("deccy draft abc --edit def", "deccy drafts", "deccy discard h1 h2",
                   "cd /j/base && jj workspace update-stale",
                   "printf '%s\\n' t.py | xargs -r jj restore --from g --to @ --",
                   '[ -n "$GATE_PATHS" ] && jj restore --from g --to @ -- $GATE_PATHS',
                   'jj restore --from d --to @ -- $GATE_PATHS $DRAFT_PATHS',
                   "jj restore --from d --to @ -- src/a.py", "pytest -q > /dev/null"):
             self.assertAllowed(self.bash(self.R, c))
-        for c in ("jj restore src/a.py", "jj new", "deccy record x", "jj describe -m x"):
+        for c in ("jj restore src/a.py", "jj new", "deccy record x", "jj describe -m x",
+                  "jj workspace add /j/base --name n -r abc"):
             self.assertBlocked(self.bash(self.R, c))
 
     def test_judge_workspace_only(self):
         self.assertAllowed(self.run_tool(self.R, "Write",
                                          file_path=f"{self.root}/workspaces/judge/r/c/u/cand/m.py"))
+        self.assertAllowed(self.run_tool(self.R, "Write",
+                                         file_path=f"{self.drafts}/ns/handle/m.py"))
         self.assertBlocked(self.run_tool(self.R, "Write",
                                          file_path=f"{self.root}/workspaces/drafts/r/c/u/a.py"))
 

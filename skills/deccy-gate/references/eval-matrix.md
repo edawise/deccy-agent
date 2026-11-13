@@ -1,6 +1,8 @@
 # Evaluation matrix
 
-An evaluation gates one edge: the dependent (child) uses the prerequisite (parent). Which
+An evaluation gates one edge: the dependent (child) adds what the standard (parent) does not
+decide and does not re-decide it. The matrix classifies formats, not authority; it cannot detect
+an inverted edge, so apply the direction test in `deccy-core/references/model.md` first. Which
 form the evaluation takes is decided by the two content layers involved — nothing else.
 
 ## The three layers

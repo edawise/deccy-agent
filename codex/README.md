@@ -9,8 +9,9 @@ and limitations.
 - **Codex CLI 0.167.0 or newer.** The bundle is tested at `0.167.0`; `codex/install.sh` refuses an
   older release. See [Upgrading Codex](#upgrading-codex) before moving to a newer one.
 - `python3` for the guard hook, the `hooks.json` helper and the deccy check scripts.
-- `jj` for draft workspaces and graph changes, and `deccy` for graph writes. Both are checked when
-  a role starts and produce a warning if missing.
+- `deccy` **0.2.2 or newer** for graph writes and the draft lifecycle (`deccy draft`,
+  `deccy drafts`, `deccy discard`, `deccy record --from`), and `jj` for refresh, restack and
+  verified cleanup. Both are checked when a role starts and produce a warning if missing.
 - `git` for the installer's clone; an existing `--from` checkout does not need it.
 
 ## Paths & verify
@@ -112,9 +113,14 @@ child cannot register a task name that does not match its pending spawn.
 | tool availability | role prompts plus the guard; root roles start from `deccy-codex` |
 | `skill` allow list | guard reads `DECCY_ROLE` / the registered child role and enforces each role's skill set |
 | `subagent` allow list | only the orchestrator may spawn; task-name prefixes must match a known role |
-| `edit` / `write` paths | guard parses `apply_patch` (`Add`, `Update`, `Delete`, `Move`) and checks every path against the role's scope |
+| `edit` / `write` paths | guard parses `apply_patch` (`Add`, `Update`, `Delete`, `Move`) and checks every path against the role's scope: the orchestrator's ledger/plan, the CLI draft root `~/.local/share/deccy/workspaces/**` for the gate author, drafter and judge, and the legacy agent-root draft/judge directories |
 | `shell` deny/allow patterns | guard evaluates the same patterns in order (last match wins) |
 | `question` (planner) | no separate question tool; the planner asks in its final message |
+
+The guard allows the CLI draft verbs per role: the orchestrator opens, lands and discards round
+drafts; the judge may open and discard its own clean-room drafts and never runs `deccy record`; the
+gate author and drafter may not run `deccy draft`/`deccy discard`. `DECCY_DRAFT_ROOT` overrides the
+CLI draft root for a test or a relocated checkout.
 
 The registered matcher is `Bash|apply_patch|Edit|Write|collaboration.*|spawn_agent`. The hook
 command **fails open** if the guard file or `python3` is missing so a moved or deleted bundle does

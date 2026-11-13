@@ -13,8 +13,8 @@ Seeds: <id> <label>, <id> <label>       # the recorded decisions this layer elab
 Scope: <one sentence>
 Out of scope: <ids or topics>
 
-| #  | act         | decision (one commitment) | on              | gate         | writes            | fork      | licensed by     |
-|----|-------------|---------------------------|-----------------|--------------|-------------------|-----------|-----------------|
+| #  | act         | decision (one commitment) | on (takes as given) | gate         | writes            | fork      | elaborates      |
+|----|-------------|---------------------------|---------------------|--------------|-------------------|-----------|-----------------|
 | U1 | new         | <one sentence, one verb>  | <ids / handles> | new          | <paths / prefix>  | —         | <id> "<clause>" |
 | U2 | new         | ...                       | U1              | new          | <paths>           | —         | U1              |
 | U3 | refine <id> | ...                       | existing        | reuse <id>   | <paths>           | —         | <id>            |
@@ -35,15 +35,18 @@ Stop conditions: <...>
   (or `reuse <id>` only if the existing evaluation already covers it). If the change needs a
   different commitment or a new node, it is `new`.
 - **decision** — the commitment in one sentence, one verb, no "and". Two commitments are two rows.
-- **on** — prerequisites: recorded node ids, or handles of rows earlier in this plan. Every `new`
-  decision needs at least one (I2). A `refine` row writes `existing`, plus any prerequisites the
-  refine adds as new edges.
+- **on (takes as given)** — the decisions the row does not re-decide: recorded node ids, or
+  handles of rows earlier in this plan. Every `new` decision needs at least one (I2). A `refine`
+  row writes `existing`, plus any decisions the refine takes as given as new edges. Not what the
+  planner read.
 - **gate** — the default is `new`: one evaluation node per new decision, `depends_on` = the row's
-  `on` set, `evaluates` = the row. That makes I4 coverage structural instead of a per-edge
-  judgement. Use `reuse <eval id>` only when an existing evaluation covers every edge the row adds;
-  use `amend <eval id>` for a refine whose evaluation must change, and `new` for a refine whose
-  added edge needs its own evaluation. Gate form and the red command are the gate author's, derived
-  from the evaluation matrix — never the planner's.
+  `on` set (the standards), `evaluates` = the row, never the row's own decision. The skeleton pass
+  realizes that with `deccy new --on <standards> --evaluates <row>`: the born node is already
+  `kind: evaluation`, so I4 coverage is structural instead of a per-edge judgement. Use `reuse <eval id>` only when an
+  existing evaluation covers every edge the row adds; use `amend <eval id>` for a refine whose
+  evaluation must change, and `new` for a refine whose added edge needs its own evaluation. Gate
+  form and the red command are the gate author's, derived from the evaluation matrix — never the
+  planner's.
 - **writes** — the repo paths this unit may write: the decision's `ref` files plus the new gate's
   test/criteria paths. The unit's own node file is implicit. Use a directory prefix when the unit
   owns a whole area, or when the exact test path depends on the gate form the author has not chosen
@@ -53,35 +56,39 @@ Stop conditions: <...>
 - **fork** — a choice that changes the content of the units that depend on this one (`A …` / `B …`,
   one line each). A fork is **not** an implementation alternative (two drafts of one unit); those
   are chosen after judging and never appear here. A forked row with no chosen branch cannot have
-  dependants in this layer: all skeletons are created before any workspace opens, and a second
-  skeleton pass would reparent open workspaces. Resolve the fork in the plan, or move its
+  dependants in this layer: all skeletons are created before any draft opens, and a second
+  skeleton pass would reparent open drafts. Resolve the fork in the plan, or move its
   dependants to the next layer.
-- **licensed by** — the recorded clause this row elaborates: a node id and a short quote, or an
-  earlier handle. A row with no licence is a wish; leave it out.
+- **elaborates** — the recorded clause this row elaborates: a node id and a short quote, or an
+  earlier handle. This is a citation, not an edge; it never enters `on`.
 
 ## Checks before returning
 
 1. Every row is one commitment, and every `new` row has at least one `on` (I1, I2).
 2. Every `new` row has `gate: new`, or names the existing evaluation that covers every edge it
-   adds. I3 and I4 then follow from the skeleton pass.
+   adds. I3 and I4 then follow from the skeleton pass, which creates each new gate with
+   `--evaluates` and the row's standards as `--on`.
 3. Every `on` resolves: a recorded id or an earlier handle. No forward references, no cycles.
 4. Every `refine` target exists and appears once. A refine never targets a node this plan creates.
 5. A `refine` that adds an edge names `gate: amend <id>` or `gate: new`; `reuse` is allowed only if
-   the existing evaluation already depends on the new prerequisite and checks the use.
+   the existing evaluation already depends on the new standard and checks the addition.
 6. A refine's new prerequisite already precedes the target in history; check
    `jj log -r '<prereq>::<target>' --no-graph -T 'change_id.shortest(8)'` (empty means it does not
    precede). Otherwise the plan is inverted; do not rely on a restack.
-7. Every row is licensed by a recorded clause or an earlier row.
+7. Every row elaborates a recorded clause or an earlier row; that citation is not an edge.
 8. No row depends on an unresolved fork. Drop its dependants from this layer instead.
 9. Every `writes` set is disjoint from every other row's, except along an `on` chain. Two units that
    need one path must be ordered by `on`; do not put them in parallel components.
 10. Handles are unique and stable.
 11. The layer is within `max_units_per_layer` (default 12; `0` unlimited). Larger layers split: the
-    skeleton pass is one linear stack, and every record rebases every workspace above it.
+    skeleton pass is one linear stack, and every landing rebases every draft above it.
+12. A row that adds nothing beyond what its `on` set already decides is a restatement, not a new
+    row: refine the owner, or reverse the edge if the row is the explicit standard the artifact
+    takes as given.
 
 ## Stop conditions
 
-- A needed decision is not licensed by anything recorded — stop and ask; do not invent it.
+- A row presupposes a decision that is not recorded — stop and ask; do not invent it.
 - A row needs a decision outside the seeds or scope — report it as the next layer's seed.
 - An existing node would need a new edge to make the layer work — plan a `refine` row for that node
   that adds the edge and its covering gate; do not add the dependency silently.
@@ -92,6 +99,7 @@ Stop conditions: <...>
 
 ## What the planner never writes
 
-No `deccy new`, no `deccy record`, no node JSON, no evaluation, no test, no workspace, and no
-ownership inventory beyond the row's `writes` cell. The layer plan names the nodes; the orchestrator
-creates them, the gate author derives the checks, and the drafter writes the decision.
+No `deccy new`, no `deccy record`, no `deccy draft`, no node JSON, no evaluation, no test, no
+workspace, and no ownership inventory beyond the row's `writes` cell. The layer plan names the nodes;
+the orchestrator creates them and opens the drafts, the gate author derives the checks, and the
+drafter writes the decision.

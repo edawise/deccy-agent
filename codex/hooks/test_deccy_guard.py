@@ -30,6 +30,8 @@ class Base(unittest.TestCase):
                       ("DECCY_GUARD_ROOT", "DECCY_AGENT_ROOT", "DECCY_STATE", "DECCY_ROLE", "HOME")}
         os.environ["DECCY_GUARD_ROOT"] = self.agent
         os.environ["DECCY_STATE"] = self.state
+        self.drafts = os.path.join(self.base, ".local", "share", "deccy", "workspaces")
+        os.environ["DECCY_DRAFT_ROOT"] = self.drafts
         os.environ.pop("DECCY_AGENT_ROOT", None)
         os.environ.pop("DECCY_ROLE", None)
         self.sid = "session-1"
@@ -503,10 +505,11 @@ class ApplyPatch(Base):
         rounds_ok = os.path.join(self.agent, "rounds", "r", "ROUND.md")
         drafts_ok = self.ws("drafts", "r", "c", "u", "a.py")
         judge_ok = self.ws("judge", "r", "c", "u", "m.py")
+        cli_draft_ok = os.path.join(self.drafts, "ns", "handle", "a.py")
         outside = os.path.join(self.repo, "src", "a.py")
         matrix = {
-            "deccy-plan": (plan_ok, [rounds_ok, drafts_ok, judge_ok, outside]),
-            "deccy-orchestrator": (rounds_ok, [drafts_ok, judge_ok, outside]),
+            "deccy-plan": (plan_ok, [rounds_ok, drafts_ok, judge_ok, cli_draft_ok, outside]),
+            "deccy-orchestrator": (rounds_ok, [drafts_ok, judge_ok, cli_draft_ok, outside]),
             "deccy-gate-author": (drafts_ok, [judge_ok, outside]),
             "deccy-drafter": (drafts_ok, [judge_ok, outside]),
             "deccy-judge": (judge_ok, [drafts_ok, outside]),
@@ -521,6 +524,9 @@ class ApplyPatch(Base):
 
         self.assertAllowed(self.as_role("deccy-orchestrator", "apply_patch",
             command=self.patch(f"*** Add File: {plan_ok}", "+x")))
+        for role in ("deccy-gate-author", "deccy-drafter", "deccy-judge"):
+            self.assertAllowed(self.as_role(role, "apply_patch",
+                command=self.patch(f"*** Add File: {cli_draft_ok}", "+x")))
 
     def test_plan_scope_is_one_directory_level(self):
         self.assertAllowed(self.as_role("deccy-plan", "Write",
@@ -587,12 +593,15 @@ class OrchestratorShell(Base):
 
     def test_protocol_commands_allowed(self):
         for command in ("deccy new --on abc -m 'x'", "deccy record nodes/x.json",
-                        "jj new abc", "jj workspace add /w --name n -r abc",
-                        "jj workspace forget n", "cd /w && jj workspace update-stale",
+                        "deccy new --on abc --evaluates def -m 'gate x'",
+                        "deccy draft abc --edit def", "deccy drafts",
+                        "deccy discard h1 h2", "deccy record --from h1 --to abc",
+                        "jj new abc", "jj workspace forget n",
+                        "cd /w && jj workspace update-stale",
                         "jj restore --from abc --to @ -- src/a.py",
                         "printf '%s\\n' a b | xargs -r jj restore --from abc --to @ --",
                         '[ -n "$PATHS" ] && jj restore --from "$D" --to @ -- $PATHS',
-                        '[ -n "$PATHS" ] && deccy record $PATHS --to "$TARGET"',
+                        '[ -n "$PATHS" ] && deccy record --from "$H" --to "$TARGET"',
                         "jj describe -m 'summary' abc",
                         "jj rebase -s abc -B def",
                         "~/.claude/skills/deccy-round/scripts/abandon-empty-heads.sh --dry-run",
@@ -607,8 +616,9 @@ class OrchestratorShell(Base):
         for command in ("jj new -A abc", "jj squash",
                         "jj describe abc", "jj abandon abc", "jj op restore x",
                         "jj restore src/a.py", "jj undo", "deccy remove x", "deccy init",
-                        "git push", "rm -rf x", "mv a b", "sh -c 'jj squash'",
-                        "xargs jj abandon"):
+                        "git push", "rm -rf x", "mv a b",
+                        "jj workspace add /w --name n -r abc",
+                        "sh -c 'jj squash'", "xargs jj abandon"):
             with self.subTest(command=command):
                 self.assertBlocked(self.as_role(self.R, "Bash", command=command))
 
@@ -649,8 +659,8 @@ class JudgeShell(Base):
     R = "deccy-judge"
 
     def test_clean_room(self):
-        for command in ("jj workspace add /j/base --name n -r abc",
-                        "jj workspace forget n", "cd /j/base && jj workspace update-stale",
+        for command in ("deccy draft abc --edit def", "deccy drafts",
+                        "deccy discard h1 h2", "cd /j/base && jj workspace update-stale",
                         "printf '%s\\n' t.py | xargs -r jj restore --from g --to @ --",
                         '[ -n "$GATE_PATHS" ] && jj restore --from g --to @ -- $GATE_PATHS',
                         'jj restore --from d --to @ -- $GATE_PATHS $DRAFT_PATHS',

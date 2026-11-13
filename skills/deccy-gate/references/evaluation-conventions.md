@@ -45,9 +45,12 @@ For a `depends_on` edge `A → B` between decisions, the covering evaluation `E`
 }
 ```
 
-The evaluation checks that *A's use of B is sound*: it evaluates the dependent `A` in the context
-of the prerequisite `B`. The direct edge `A.depends_on ∋ B` stays — the evaluation is additional
-coverage, not a replacement.
+The evaluation checks that `A` adds only what `B` does not decide and does not re-decide `B`: it
+evaluates the subject `A` against the standard `B`. `E.depends_on` never contains `E.evaluates`.
+The direct edge `A.depends_on ∋ B` stays — the evaluation is additional coverage, not a replacement.
+A new evaluation is born with those two relations already set: `deccy new -m "<gate>" --on <B>...
+--evaluates <A>` writes `kind: evaluation`, `evaluates: [A]` and `depends_on: [B...]` atomically.
+An amendment is an edit of the existing document, not a new birth.
 
 When a **refine** adds an edge to an existing decision, the covering evaluation is either an
 `amend` of an existing evaluation (extend its `depends_on` to include the new prerequisite and its

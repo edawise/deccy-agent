@@ -12,16 +12,16 @@ The bundle:
 - author and freeze a gate before implementation;
 - judge every candidate clean-room;
 - let the user choose alternatives;
-- use raw `jj` for draft isolation and the existing `deccy new` / `deccy record` for graph writes;
-- make the manual jj sequence the specification for the future `deccy draft` / `record --from`
-  and a batch skeleton verb.
+- use **deccy-cli v0.2.2**'s `deccy draft` / `deccy drafts` / `deccy discard` for isolated draft
+  workspaces and `deccy record --from` for landing, with `deccy new --evaluates` for gate skeletons;
+- keep raw `jj` for refresh, restack, workspace listing/forgetting and verified cleanup.
 
 ## Skills
 
 | ID | Role | Contents |
 |---|---|---|
 | `deccy-core` | everyone | model, invariants, placement, CLI map, diagnostic scripts |
-| `deccy-round` | planner, orchestrator | layer plan, skeleton pass, component partition, phases, jj-direct workspace protocol, failure handling |
+| `deccy-round` | planner, orchestrator | layer plan, skeleton pass, component partition, phases, CLI draft protocol, failure handling |
 | `deccy-author` | drafter | one decision in a frozen-gate draft, custody, evidence |
 | `deccy-gate` | gate author | evaluation design, eval matrix, red/green, freeze |
 | `deccy-judge` | judge | clean-room base-red/candidate-green, gate integrity, counterexamples, gate-strength advisory |
@@ -62,10 +62,10 @@ layer plan / user approval
   -> handle map (U1..Un, G1..Gn -> change ids)
   -> partition into components
   -> per component, in parallel:
-       gate drafts (author parallel across components, record serial) -> freeze
+       gate drafts (author parallel across components, landing serial) -> freeze
        implementation drafts (parallel / alternatives)
        judge clean-room (base red, candidate green)
-       user chooses -> land -> refresh every other open workspace
+       user chooses -> land -> refresh every other open draft
   -> validate + topology + custody
 ```
 
@@ -80,19 +80,22 @@ dependency order. The whole layer is one round: one approval, one skeleton pass,
 close.
 
 The gate is authored and frozen **before** a drafter starts. The judge runs the gate in its own
-workspaces at the decision node, not in the drafter’s workspace. Nothing is recorded before the
+clean-room drafts at the decision node, not in the drafter's workspace. Nothing is recorded before the
 judge reports; a rejected candidate never enters the graph.
 
 ## New and refine units
 
 A unit is either:
 
-- **`new`** — one new decision node. The implementation draft is based at the frozen gate
-  evaluation, so the gate test is already in the tree.
+- **`new`** — one new decision node. The implementation draft is based at the decision; the
+  topological restack puts the frozen evaluation after it, so the orchestrator restores the gate
+  test into the draft for running. The gate paths are **not landable**; the landable set is the
+  draft diff minus the gate paths.
 - **`refine <existing id>`** — an edit to an existing decision. The draft is based at the existing
-  target, so it carries the target’s current node and refs. The gate paths are restored into the
-  draft for running but are **not landable**; the landable set is the draft diff minus the gate
-  paths. A refine does not create a decision node. It may add a `depends_on` edge to the target.
+  target, so it carries the target's current node and refs. A new evaluation follows the target
+  after the restack; an amended existing one is normally an ancestor. The orchestrator restores the
+  gate paths uniformly for running, and they are **not landable**. A refine does not create a
+  decision node. It may add a `depends_on` edge to the target.
 
 A refine reuses its existing evaluation when it still covers the use, amends it in a gate draft
 first, or adds a new evaluation for an edge it adds. A new edge needs I4 coverage, so the plan's
@@ -101,69 +104,71 @@ edge. The new prerequisite must already precede the target in history; a refine 
 inversion (the skeleton restack is for gate placement, not a refine edge). If the change needs a
 different commitment or a new node, it is a `new` unit, not a refine.
 
-## jj-direct draft protocol
+## Draft protocol (deccy-cli v0.2.2)
 
-Drafts are ordinary jj workspaces under an external root:
+Drafts use the CLI's own lifecycle. The orchestrator opens one from the trunk:
 
 ```sh
-ROOT="$HOME/.local/share/deccy/agent"
-WS="$ROOT/workspaces/drafts/<round>/<component>/<handle>"
-jj workspace add "$WS" --name "deccy-<round>-<component>-<handle>" -r <base-change-id>
+ROUND_EDIT=$(jj log -r @ --no-graph -T 'change_id')
+read -r HANDLE WS <<EOF
+$(deccy draft <node-id> --edit "$ROUND_EDIT")
+EOF
 ```
 
-The root is fixed because the agents’ edit permissions are scoped to it. Moving it
-requires editing those permissions in `opencode/agents/`, `claude/hooks/deccy-guard.py`,
+`deccy draft` prints `<handle> <workspace path>`, creates a record at `.deccy/work/<handle>.json`
+and puts the workspace under `~/.local/share/deccy/workspaces/<repository-namespace>/<handle>` —
+outside the repository, where the role guards allow writes. The root is fixed by the CLI; moving it
+would require editing the edit permissions in `opencode/agents/`, `claude/hooks/deccy-guard.py`,
 `codex/hooks/deccy-guard.py` and `pi/agents/`.
 
-The workspace’s `@` is the draft. Edit in place; never run `jj new` inside it. Run jj from inside
-the workspace (`cd "$WS" && jj ...`), not with `-R` from the trunk.
+The workspace's `@` is the draft: a child of the named node. Edit in place; never run `jj new`
+inside it. Run jj from inside the workspace (`cd "$WS" && jj ...`), not with `-R` from the trunk.
+`deccy drafts` lists every record and flags a `drifted` open record whose workspace is gone.
 
-Landing is the manual version of `record --from`:
+The draft's base matters:
+
+- a **new unit** opens at the decision; the topology restack puts the evaluation after it, so the
+  orchestrator restores the gate paths for running only;
+- a **gate** opens at the evaluation; before the restack the evaluation is the decision's parent, so
+  the gate draft carries the prerequisites and the new test, not the unbuilt decision;
+- a **refine** opens at the existing target and restores the gate paths for running only the same
+  way.
+
+Landing is one CLI call:
 
 ```sh
-cd "$WS" && jj status
-DRAFT=$(cd "$WS" && jj log -r @ --no-graph -T 'change_id.shortest(8)')
-PATHS=$(cd "$WS" && jj diff --summary -r @ | sed -n 's/^[A-Z] //p')
-
 cd <repo-root>
-jj new <target>
-[ -n "$PATHS" ] && jj restore --from "$DRAFT" --to @ -- $PATHS
-[ -n "$PATHS" ] && deccy record $PATHS --to <target>
-jj workspace forget "deccy-<round>-<component>-<handle>"
-jj new <target>
+deccy record --from "$HANDLE" --to <target>
+deccy validate
+jj workspace forget "draft-$HANDLE"
 ```
 
-The path list travels as arguments. Never pipe it through a wrapper (`xargs`, `sh -c`, `env`, …):
-Claude and Codex deny a wrapper's command, and Pi floors any wrapper to a permission prompt on every
-call, so it cannot be pre-approved by the role policy. The `[ -n ... ]` test is not cosmetic — an
-empty list would turn `jj restore --from <id> --to @ --` into a restore of the whole change.
+The CLI compares the draft's content with the target, lands exactly the changed landable set (the
+target's current owned set plus refs the draft's node document adds), refuses a stale draft, keeps
+the target's summary, and turns the record `landed`. A new `ref` path lands in the same call as the
+node JSON. `deccy undo` walks the whole recording back, including an added path.
 
-For a **refine**, base the workspace at the existing target and restore the gate paths for
-running; land only the landable set:
+An unlanded draft is ended with `deccy discard <handle>`: it abandons the draft change, forgets the
+workspace, removes the directory and the record. A **landed** record cannot be discarded; forget its
+workspace with `jj workspace forget` and let the close-out cleanup abandon the empty head.
 
-```sh
-jj workspace add "$WS" --name "deccy-<round>-<component>-<handle>" -r <target-id>
-cd "$WS"
-[ -n "$GATE_PATHS" ] && jj restore --from "$EVAL_ID" --to @ -- $GATE_PATHS
-# edit the existing node + refs; run the gate
-PATHS=$(jj diff --summary -r @ | sed -n 's/^[A-Z] //p')
-LANDABLE_PATHS=$(printf '%s\n' "$PATHS" | grep -vxF -f <(printf '%s\n' "$GATE_PATHS" | sed '/^$/d') || true)
-# land only LANDABLE_PATHS; gate paths stay in the evaluation
-# the subtraction uses bash/zsh process substitution
-```
+The path list still travels as arguments to `record --from` when used as an assertion; never pipe it
+through a wrapper (`xargs`, `sh -c`, `env`, …): Claude and Codex deny a wrapper's command, and Pi
+floors any wrapper to a permission prompt on every call, so it cannot be pre-approved by the role
+policy. The `[ -n ... ]` test is still not cosmetic for a `jj restore` that stages a refine gate path
+or a judge candidate.
 
 `jj workspace forget` removes the workspace, but not reliably its working-copy commit: a draft
 forgotten while it still carried content can survive as an empty head. After every draft is
-forgotten, run `skills/deccy-round/scripts/abandon-empty-heads.sh`; it abandons only heads that
-are empty, undescribed, unbookmarked, not an open workspace’s working copy, and not a node’s own
-change, and requires one head afterwards.
-Never run `jj abandon` directly. Use `jj workspace update-stale` after a trunk move; a conflict
-means the draft is stale and should be rebuilt from the current gate.
+forgotten, run `skills/deccy-round/scripts/abandon-empty-heads.sh`; it abandons only heads that are
+empty, undescribed, unbookmarked, not an open workspace's working copy, and not a node's own change,
+and requires one head afterwards. Never run `jj abandon` directly. Use `jj workspace update-stale`
+after a landing; a conflict or a stale-record refusal means the draft must be discarded and rebuilt
+from the current gate.
 
-`deccy record` checks ownership against the target’s **current** document. The role author writes
-the full node with its `content.ref`; a refine starts from the target’s current refs. If a draft
-adds a new path, record the node file first (it updates `ref`), then record the new path; do not
-`jj squash` around the refusal.
+`deccy record --from` checks ownership and staleness against the target's **current** document. A
+draft that adds a new `ref` lands the node JSON and the path together; do not split it and do not
+`jj squash` around a refusal.
 
 See `skills/deccy-round/references/jj-direct.md` for the allowed/forbidden surface.
 
@@ -284,31 +289,32 @@ nodes).
   V2 spawn arguments are not a stable public API, so an upgrade can silently break the guard or the
   registration handshake. Re-run the guard tests and a one-unit fixture round after upgrading, and
   see [`codex/README.md`](codex/README.md#upgrading-codex).
-- **Refine units.** A refine draft is based at the existing target and restores the gate paths for
-  running. The landable set is the draft diff minus those paths; the orchestrator must subtract
-  them and never record them into the target. If the refine adds a new `ref`, the node JSON is
-  recorded first, then the new path. A refine may add the `depends_on` edge the plan names, with a
-  gate that covers it; a refine that needs a different decision or a new node is a `new` unit.
-- **Gate history.** The gate’s position in jj history depends on creation order: `deccy new`
-  positions at the unique head of its `--on` set, so the gate may sit above the decision. The gate
-  is still authored and frozen before implementation, but history does not yet guarantee “gate
-  before decision”; the final `--after` does. The judge’s clean-room run is the acceptance
-  evidence.
+- **Refine units.** A refine draft is `deccy draft <target>`. A new evaluation follows the target
+  after the restack; an amended existing one is normally an ancestor. The orchestrator restores the
+  gate paths uniformly for running only, and the landing's landable set excludes them. `deccy
+  record --from` lands a new `ref` with the node JSON in one call. A refine may add the `depends_on`
+  edge the plan names, with a gate that covers it; a refine that needs a different decision or a new
+  node is a `new` unit.
+- **Gate placement.** `deccy new --evaluates` births the evaluation before its subject, so the
+  checker reports an inversion until the round restacks the evaluation after the decision. The gate
+  is authored and frozen in that birth order, then the restack runs before implementation; an
+  implementation draft restores the frozen gate paths for running. The checker, not a hand-rolled
+  order, is the oracle, and the judge's clean-room run is the acceptance evidence.
 - **Linear skeleton stack.** `deccy new` always positions after the unique head of its `--on` set,
-  so one skeleton pass produces one linear stack. Every gate or implementation record rebases
-  everything above it; every open workspace must be refreshed with `jj workspace update-stale` and
-  its gate re-run before the verdict is trusted. A future `deccy new --after` (sibling placement)
-  and a batch skeleton verb remove most of that churn; until then keep a layer within
-  `max_units_per_layer` (default 12). A component is a plan-level partition, not yet a separate
-  jj stack.
-- **Gate authoring is parallel, recording is serial.** Gate drafts base at their own evaluation
-  nodes and can be written concurrently, but the graph write cannot: recording one gate stales the
-  other open workspaces. The orchestrator records one at a time and refreshes every workspace.
+  so one skeleton pass produces one linear stack. Every gate or implementation landing rebases
+  everything above it; every open draft must be refreshed with `jj workspace update-stale` and its
+  gate re-run before the verdict is trusted. A future sibling-placement form and a batch skeleton
+  verb would remove most of that churn; until then keep a layer within `max_units_per_layer`
+  (default 12). A component is a plan-level partition, not yet a separate jj stack.
+- **Gate authoring is parallel, landing is serial.** Gate drafts base at their own evaluation nodes
+  and can be written concurrently, but the graph write cannot: `deccy record --from` on one gate
+  stales the other open drafts. The orchestrator lands one at a time and refreshes every draft.
 - **Bounds and barrier are advisory.** The orchestrator enforces `max_units_per_layer`,
-  `max_open_drafts` and `round_barrier`; the CLI does not yet. The round state lives in
-  `~/.local/share/deccy/agent/rounds/`, not in `.deccy/work/`.
+  `max_open_drafts` and `round_barrier`; the CLI does not yet. Draft records live in
+  `.deccy/work/` (the CLI owns them); the layer plan, component partition and verdicts still live in
+  `~/.local/share/deccy/agent/rounds/`.
 - **Forks are resolved before skeletons.** A fork (`A …` / `B …`) changes the content of its
-  dependants, and all skeletons are created before any workspace opens, so an unchosen fork's
+  dependants, and all skeletons are created before any draft opens, so an unchosen fork's
   dependants belong to the next layer. There is no second skeleton pass while drafts are open.
 - **No graph verdicts.** Judge verdicts and red/green evidence stay in the round report; the
   evaluation node describes only the check (I5).
@@ -316,8 +322,8 @@ nodes).
   candidate passing, an ungrounded check) as `gate-weak`; it does not veto the candidate. The user
   decides whether to accept the weak gate or ask the gate author to amend it. Gate **integrity**
   failures (hash, gate edits, substituted command) still block.
-- **Custody check.** Run `check-ref-custody.py` only when no draft workspaces are open; a draft
-  intentionally edits files outside its target’s ownership until landing.
+- **Custody check.** Run `check-ref-custody.py` only when `deccy drafts` shows no `open` row; a
+  draft intentionally edits files outside its target's ownership until landing.
 - **Empty heads after forget.** `jj workspace forget` can leave an empty head (observed in a past
   round). The orchestrator now runs the verified `abandon-empty-heads.sh` at close; a
   remaining non-empty or bookmarked head still stops the round for a human decision.

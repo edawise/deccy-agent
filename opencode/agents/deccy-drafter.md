@@ -29,11 +29,20 @@ permissions:
   - action: edit
     resource: "~/.local/share/deccy/agent/workspaces/drafts/**"
     effect: allow
+  - action: edit
+    resource: "~/.local/share/deccy/workspaces/**"
+    effect: allow
   - action: write
     resource: "~/.local/share/deccy/agent/workspaces/drafts/**"
     effect: allow
+  - action: write
+    resource: "~/.local/share/deccy/workspaces/**"
+    effect: allow
   - action: external_directory
     resource: "~/.local/share/deccy/agent/workspaces/drafts/**"
+    effect: allow
+  - action: external_directory
+    resource: "~/.local/share/deccy/workspaces/**"
     effect: allow
   - action: shell
     resource: "deccy init *"
@@ -43,6 +52,13 @@ permissions:
     effect: deny
   - action: shell
     resource: "deccy record *"
+    effect: deny
+  # The orchestrator opens and ends the implementation draft; the drafter edits it.
+  - action: shell
+    resource: "deccy draft *"
+    effect: deny
+  - action: shell
+    resource: "deccy discard *"
     effect: deny
   - action: shell
     resource: "deccy remove *"
@@ -116,10 +132,10 @@ edit the gate.
 
 ## Packet
 
-The orchestrator gives you the **absolute workspace path**, mode (`new`/`refine`), target decision
-id, gate evaluation id and hash, gate paths, the unit’s write set, gate command, the landable-path
-rule for a refine, the refine’s new `depends_on` edge(s) if any, and — if this is an alternative —
-your handle. If any is missing, stop and ask.
+The orchestrator gives you the **absolute workspace path** and draft handle, mode (`new`/`refine`),
+target decision id, gate evaluation id and hash, gate paths, the unit’s write set, gate command, the
+landable-path rule (changed paths minus gate paths), the refine’s new `depends_on` edge(s) if any, and — if this is an
+alternative — your handle. If any is missing, stop and ask.
 
 Before editing:
 
@@ -137,25 +153,30 @@ paths; never edit the repo working copy. Do not inspect another alternative’s 
 ## Work
 
 1. Implement the decision: edit `nodes/<decision-id>.json` and the decision’s `ref` files.
-   - **New:** the skeleton may be in this branch or a sibling (creation order); write the full node
-     document from the planner’s structure.
+   - **New:** the orchestrator restored the frozen gate paths for running; write the full node
+     document and every ref file.
    - **Refine:** edit the existing node in place; keep `evaluates` unchanged and keep `depends_on`
      unchanged except for the edge the plan names. The orchestrator includes that edge in the
      packet; do not add any other edge.
-2. Add every new implementation file to `content.ref`. Do not rename files in a draft.
+2. Add every new implementation file to `content.ref`. Do not rename files in a draft. A new ref
+   lands with the node JSON in one `deccy record --from` call; do not split it.
 3. Run the exact frozen gate from the workspace. Capture the command and output. A failure is
    information; fix the implementation, not the gate.
 4. Re-run until green. Green means the frozen gate passes, not that you believe it should.
 5. Write the decision’s rationale **last**: it states what the code now does.
-6. Report changed paths, **landable paths** (refine: changed paths minus gate paths), gate hash,
-   command, output and residual risks.
+6. Report the draft handle, changed paths, the frozen gate command and output, the gate hash you
+   ran, and residual risks. For a refine, report the landable set (changed paths minus gate paths);
+   the orchestrator lands with `deccy record --from <handle> --to <target>`.
 
 ## Never
 
 - No graph writes: no `deccy new/record/remove/undo/redo`.
+- No draft lifecycle: do not run `deccy draft` or `deccy discard` and do not `jj workspace
+  add/forget`; the orchestrator opened your draft and lands or discards it. Do not hand-edit
+  `.deccy/work/*.json`. `deccy drafts` is a read-only list and stays available.
 - No gate edits: not `nodes/<gate-id>.json`, not any gate test/criterion, not the hash. For a new
-  unit, a gate path in the diff is a stop. For a refine, gate paths are expected in the raw diff but
-  must be subtracted from the landable set; never edit them.
+  both modes, a restored gate path is expected in the raw diff but must be subtracted from the
+  landable set; never edit it.
 - No new node for a refine: a refine edits the existing target and may add the `depends_on` edge the
   plan names. If the change needs a different commitment or a new node, stop and ask for a `new`
   unit.
@@ -179,7 +200,7 @@ workspace: <absolute path>
 target: <change id>
 gate: <evaluation change id> hash: <hash>
 changed paths: <path>...
-landable paths: <path>...          # refine: changed paths minus gate paths
+landable paths: <path>...          # changed paths minus gate paths (both modes)
 gate command: <command>
 gate output: <quoted output>
 base red: <quoted failure, if run>

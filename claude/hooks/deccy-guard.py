@@ -41,6 +41,12 @@ def agent_root() -> str:
     return os.environ.get("DECCY_GUARD_ROOT", "~/.local/share/deccy/agent")
 
 
+def draft_root() -> str:
+    # deccy-cli v0.2.2 places every `deccy draft` workspace under this fixed per-user root,
+    # outside the repository and outside the agent bundle root.
+    return os.environ.get("DECCY_DRAFT_ROOT", "~/.local/share/deccy/workspaces")
+
+
 # --- shell rule lists, copied from opencode/agents/*.md (order matters: last match wins) -----------
 
 D, A = "deny", "allow"
@@ -52,6 +58,7 @@ PLAN_SHELL = (
                                 "restore", "split", "metaedit", "undo", "op")]
     + [(D, "jj workspace add *"), (D, "jj workspace forget *"), (D, "jj workspace update-stale *")]
     + GRAPH_WRITES
+    + [(D, "deccy draft *"), (D, "deccy discard *")]
     + [(D, p) for p in ("* > *", "* >> *", "* >| *", "cat *> *", "tee *", "* | tee *")]
     + [(D, f"{c} *") for c in ("rm", "mv", "cp", "install", "dd", "truncate", "touch", "mkdir",
                                "rmdir", "ln", "chmod", "chown", "sed", "awk", "perl", "python",
@@ -65,7 +72,9 @@ ORCHESTRATOR_SHELL = (
      (D, "jj op *"), (D, "jj split *"), (D, "jj metaedit *"), (D, "jj abandon *"), (D, "jj undo *"),
      (D, "jj restore *"),
      (A, "jj restore --from * --to @ -- *"), (A, "jj restore --from * --into @ -- *"),
+     (D, "jj workspace add *"),
      (A, "*abandon-empty-heads.sh*"), (A, "*delete-round-state.sh*"),
+     (A, "deccy draft *"), (A, "deccy discard *"),
      (D, "deccy init *"), (D, "deccy remove *"),
      (D, "git commit *"), (D, "git push *"), (D, "git checkout *"), (D, "git reset *")]
     + [(D, f"{c} *") for c in ("rm", "mv", "cp", "tee", "dd", "truncate", "chmod", "chown")]
@@ -78,6 +87,7 @@ AUTHOR_BASE = (  # gate author and drafter share this list
     + [(D, "jj workspace add *"), (D, "jj workspace forget *"), (D, "jj workspace update-stale *")]
     + [(D, "git add *"), (D, "git commit *"), (D, "git reset *")]
     + [(A, "jj workspace update-stale *")]  # the protocol instructs it; last match wins
+    + [(D, "deccy draft *"), (D, "deccy discard *")]
 )
 
 GATE_AUTHOR_SHELL = AUTHOR_BASE
@@ -90,13 +100,16 @@ JUDGE_SHELL = (
     GRAPH_WRITES
     + [(D, f"jj {v} *") for v in ("new", "squash", "rebase", "describe", "op", "split", "metaedit",
                                   "abandon", "undo", "restore")]
+    + [(D, "jj workspace add *")]
     + [(A, "jj restore --from * --to @ -- *"), (A, "jj restore --from * --into @ -- *")]
+    + [(A, "deccy draft *"), (A, "deccy discard *")]
     + [(D, "git add *"), (D, "git commit *"), (D, "git reset *")]
 )
 
 
 def policies() -> dict:
     root = agent_root()
+    drafts = draft_root()
     return {
         "deccy-plan": {
             "skills": {"deccy-core", "deccy-round"},
@@ -113,19 +126,19 @@ def policies() -> dict:
         "deccy-gate-author": {
             "skills": {"deccy-core", "deccy-gate"},
             "agents": set(),
-            "writes": [f"{root}/workspaces/drafts/**"],
+            "writes": [f"{root}/workspaces/drafts/**", f"{drafts}/**"],
             "shell": GATE_AUTHOR_SHELL,
         },
         "deccy-drafter": {
             "skills": {"deccy-core", "deccy-author"},
             "agents": set(),
-            "writes": [f"{root}/workspaces/drafts/**"],
+            "writes": [f"{root}/workspaces/drafts/**", f"{drafts}/**"],
             "shell": DRAFTER_SHELL,
         },
         "deccy-judge": {
             "skills": {"deccy-core", "deccy-judge"},
             "agents": set(),
-            "writes": [f"{root}/workspaces/judge/**"],
+            "writes": [f"{root}/workspaces/judge/**", f"{drafts}/**"],
             "shell": JUDGE_SHELL,
         },
     }

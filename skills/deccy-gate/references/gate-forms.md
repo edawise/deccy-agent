@@ -1,18 +1,19 @@
 # Gate-author procedure
 
-A gate is the evaluation node covering one use: the dependent `A` relies on prerequisite `B`.
-The gate is `E` with `E.evaluates ∋ A` and `E.depends_on ∋ B`. It checks that **A’s use of B is
-sound**, not that A restates B.
+A gate is the evaluation node covering one addition: the dependent `A` takes prerequisite `B` as
+given and adds what B does not decide. The gate is `E` with `E.evaluates ∋ A` and
+`E.depends_on ∋ B`. It checks that **A adds only what B does not decide and does not re-decide
+B**, not that A restates B.
 
-## 1. Read the use
+## 1. Read the addition
 
 ```sh
 deccy show <decision-id>
-deccy show <prerequisite-id>
+deccy show <standard-id>
 ```
 
-Name the use in one sentence: “A relies on B for ___.” If you cannot name it, the edge is not
-ready to gate. Stop and report an unsettled prerequisite.
+Name the addition and the standard in one sentence: “A adds ___, taking B as given.” If you cannot
+name the addition, the node is a restatement or the edge is inverted; stop and report it.
 
 Check that the decision really exists and the edge is intended. A gate for a decision that does
 not exist is ungrounded; a gate for an edge the plan does not draw is scope creep.
@@ -50,8 +51,16 @@ because a test is convenient; choose it because of the layers.
 - The rationale says why this check, not what the result was.
 - No verdict, no “currently failing”, no session evidence (I5).
 
-If the evaluation node was created as a decision skeleton, change `kind` to `evaluation`, add
-`evaluates`, and set `depends_on` to the prerequisite. Keep the change id.
+The skeleton pass creates the evaluation with `deccy new -m "<gate>" --on <standards>...
+--evaluates <subject>`: the document is already `kind: evaluation` with `evaluates` and
+`depends_on` set, and the evaluation is inserted before the subject. Gate authoring happens before
+the round restacks the evaluation after its subject, so the gate draft does not carry the unbuilt
+decision. Do not re-type those fields.
+If you were handed a decision skeleton with no `evaluates`, stop and report the skeleton-pass
+error. Keep the change id; `amend` edits the existing document in place.
+
+The node and any new test/criteria path land together with `deccy record --from <handle> --to
+<eval-id>`; the CLI's landable set includes refs the draft's node document adds.
 
 ## 4. Write the check
 
@@ -59,12 +68,12 @@ If the evaluation node was created as a decision skeleton, change `kind` to `eva
 
 Write the test at the path you listed. It must:
 
-- exercise the **use** A makes of B, not A’s internal wording;
+- exercise the **addition** A makes to B, not A’s internal wording;
 - fail on the prerequisite alone for the intended reason;
 - pass on a correct implementation without special-casing the candidate;
 - avoid asserting an implementation detail the decision does not require.
 
-Run it red in the gate workspace:
+Run it red in the gate draft:
 
 ```sh
 cd "$WS"
@@ -127,7 +136,7 @@ weak.
 - Open the gate draft at the **existing evaluation**; edit the evaluation document and its tests in
   place. Keep the change id; explain why the old gate no longer covers the use.
 - The red check runs against the **existing target’s current state**, not the prerequisite alone.
-  If the evaluation branch does not include the target, the orchestrator opens a check workspace
+  If the evaluation branch does not include the target, the orchestrator opens a check draft
   at the target and restores the new test paths from the gate draft into it; run the red command
   there. Do not edit the target.
 - If the old gate already passes on the current target and the refine is meant to change behavior,
@@ -138,7 +147,7 @@ weak.
 
 Adding a new evaluation for a refine follows the same red rule: open the gate draft at the evaluation
 skeleton the skeleton pass created, author the check for the new use, and run red against the
-target’s current state in the check workspace.
+target’s current state in the check draft.
 
 The orchestrator records and hashes the gate; you do not.
 
@@ -149,12 +158,12 @@ path. You do not record it. Report:
 
 ```text
 evaluation: <change id>
-edge: <decision> -> <prerequisite>
+edge: <decision> -> <standard>
 form: <...>
 changed paths: <...>
 red command: <...>
 red output: <...>
-why this is the use: <...>
+why this is the addition: <...>
 assumptions / risks: <...>
 ```
 

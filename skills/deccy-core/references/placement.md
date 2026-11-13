@@ -34,8 +34,10 @@ papering over it.
 3. **The work touches files listed in another node's `ref` → you are changing that node's
    decision.** Either the touch serves that decision (squash it into the node) or it serves a
    different purpose (new decision, new node). When unsure, new node.
-4. **A check (test, criterion, measurement) → evaluation node**, wired per I4
-   (`evaluation-conventions.md`).
+4. **A check (test, criterion, measurement) → evaluation node**, wired per I4 and born with
+   `deccy new -m <summary> --on <standard>... --evaluates <subject>` (`evaluation-conventions.md`).
+   The flag sets `kind: evaluation` and `evaluates` in the birth call; the author writes only the
+   check content and rationale.
 
 ## Splitting a bundled node
 
@@ -46,14 +48,16 @@ when they point to genuinely separate reasoning. Procedure:
 
 1. Create the split-out decision as a **new node** in a new change after the
    shared parent (`deccy new -m <summary> --on <parent>`), with `depends_on` naming that parent.
+   A check split out with it is a separate `--evaluates` birth.
 2. Trim the original node to what remains via a `deccy record` edit (edit the
-   node file in the working copy, then `deccy record nodes/<id>.json --to <id>`).
+   node file in the working copy, then `deccy record nodes/<id>.json --to <id>`), or land the edit
+   from a draft with `deccy record --from <handle> --to <id>` when a round is in flight.
    Never delete-and-recreate: the original change id is
    referenced by existing edges.
 3. Rewire each dependent's `depends_on` to the parent its reasoning actually uses
    (`deccy record` edits, one node at a time).
 4. Cover every new or rewired decision edge with a sandwich evaluation
-   (`evaluates` ∋ dependent, `depends_on` ∋ prerequisite), and re-scope or
+   (`evaluates` ∋ dependent, `depends_on` ∋ prerequisite), born with `--evaluates`, and re-scope or
    split any existing gate whose subject has narrowed.
 
 Merges and re-parenting follow the same shape in reverse: the surviving node

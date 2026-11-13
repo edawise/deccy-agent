@@ -15,8 +15,10 @@ subagents.
 - `python3` for the `subagents.json` merge and the shared deccy check scripts.
 - Node `23.6+` (or `22.6+` with `--experimental-strip-types`) to run the TypeScript extension tests
   directly; Pi itself bundles its own runtime.
-- `jj` for draft workspaces and graph changes, and `deccy` for graph writes. Both are checked when
-  a role starts and produce a warning if missing.
+- `deccy` **0.2.2 or newer** for graph writes and the draft lifecycle (`deccy draft`,
+  `deccy drafts`, `deccy discard`, `deccy record --from`), and `jj` for refresh, restack and
+  verified cleanup. Both are checked when a role starts and produce a warning if missing. Check
+  `deccy --version` before a round; v0.2.2 is required.
 - `git` for the installer's clone; an existing `--from` checkout does not need it.
 
 ## Locked plugin combination
@@ -64,6 +66,21 @@ air-gapped environment.
   `subagent_type`, but it only loads for a session whose cwd is the neutral root — see decision 8.
 - **Project (`--project <dir>`):** `<dir>/.pi/skills`, `<dir>/.pi/agents`, `<dir>/.pi/extensions`,
   `<dir>/.pi/bin/deccy-pi`, and `<dir>/.pi/subagents.json`.
+
+Round work state has two roots. The **agent state root** (`~/.local/share/deccy/agent/`) holds the
+plan and round ledger. **Draft workspaces** are created by `deccy draft` under
+`~/.local/share/deccy/workspaces/<repository-namespace>/<handle>`, outside the repository; the CLI
+fixes that path, and the gate-author, drafter and judge policies allow it. The trunk's
+`.deccy/work/<handle>.json` records are the draft registry; `deccy drafts` lists them
+(`<handle> <open|landed> <name> <path> [drifted]`), and a `drifted` open row is a stop.
+
+| Role | Draft access | Graph writes |
+|---|---|---|
+| Planner | reads `deccy drafts` only | none |
+| Orchestrator | opens drafts with `deccy draft`, lands with `deccy record --from`, ends unlanded drafts with `deccy discard` | `deccy new/record/draft/discard` |
+| Gate author | edits the draft the orchestrator opened; never `deccy draft`/`deccy discard` | none |
+| Drafter | edits the draft the orchestrator opened; never `deccy draft`/`deccy discard` | none |
+| Judge | opens and discards its own clean-room drafts with `deccy draft`/`deccy discard`; never `deccy record` | none |
 
 `PI_AGENT_DIR` (or `PI_CODING_AGENT_DIR`) relocates the global Pi agent directory;
 `DEST_SKILLS`, `DEST_AGENTS`, `DEST_EXTENSIONS` and `DEST_BIN` override the individual global
@@ -176,8 +193,8 @@ from the session header's `parentSession`, and refuses to append a root entry in
 | tool availability | role `tools:` frontmatter and the launcher's `--tools` |
 | `skill` allow list | `permission.skill` (`"*": deny`, then the role's two skills) |
 | `subagent` allow list | `permission`/`tools` omit `subagent` for the four worker roles; `deccy-role.ts` blocks every `subagent` call except an orchestrator root naming `deccy-plan`, `deccy-gate-author`, `deccy-drafter` or `deccy-judge` |
-| `edit` / `write` paths | `permission.write` / `permission.edit` path maps (last match wins) |
-| shell deny/allow patterns | `permission.bash` ordered patterns (last match wins) |
+| `edit` / `write` paths | `permission.write` / `permission.edit` path maps (last match wins); gate-author, drafter and judge allow the CLI draft root `~/.local/share/deccy/workspaces/*/*` |
+| shell deny/allow patterns | `permission.bash` ordered patterns (last match wins); the draft verbs are allowed or denied per role (`deccy draft`/`discard`: orchestrator and judge; denied for planner, gate author and drafter; `deccy record`: orchestrator only) |
 | `external_directory` | explicit `external_directory: allow` and `path: allow` in every role file |
 | `question` (planner/orchestrator) | `ask_user_question` when installed and UI-backed; otherwise a question in the final message |
 
@@ -287,8 +304,11 @@ Then:
    installed.
 
 3. Run the guard probes and a one-unit fixture round — or at minimum:
-   - a drafter write outside `workspaces/drafts/` is denied;
-   - a judge write outside `workspaces/judge/` is denied;
+   - a drafter write outside `workspaces/drafts/` and the CLI draft root
+     `~/.local/share/deccy/workspaces/` is denied;
+   - a judge write outside `workspaces/judge/` and the CLI draft root is denied;
+   - a planner, gate author or drafter `deccy draft`/`deccy discard` is denied, while the
+     orchestrator and judge may run them and only the orchestrator may run `deccy record`;
    - an orchestrator `subagent` call to `general-purpose` or `Explore` is blocked;
    - a plan root cannot spawn at all;
    - an interactive `ask_user_question` still appears;
@@ -324,7 +344,7 @@ rather than replacing a package at a different version.
   procedure text is common to all four ports.
 - **Last validated combination.** Pi `1.5.0`, `@gotgenes/pi-subagents@25.0.5`,
   `@gotgenes/pi-permission-system@42.0.0`, optional
-  `@juicesharp/rpiv-ask-user-question@2.15.0`, jj `0.46.0`, deccy `0.2.1`, macOS arm64.
+  `@juicesharp/rpiv-ask-user-question@2.15.0`, jj `0.46.0`, deccy `0.2.2`, macOS arm64.
 - **Before handoff.** Run `node pi/tests/deccy-role.test.mjs` and `sh pi/tests/launcher.test.sh`,
   plus the guard probes and one-unit fixture round described under
   [Upgrading Pi](#upgrading-pi).
@@ -338,11 +358,13 @@ rather than replacing a package at a different version.
   (`xargs`, `sudo`, `env`, `time`, `find -exec`, …) from `allow` to `ask` *after* rule resolution,
   recorded as `<indirection-bash-wrapper>`, so no `permission.bash` pattern can pre-approve one and
   the inner command's own rule is never read (the Claude and Codex guards peel a wrapper instead).
-  A landing therefore passes its path list as arguments —
-  `[ -n "$PATHS" ] && jj restore --from "$DRAFT" --to @ -- $PATHS` — because
+  A refine's gate-path restore therefore passes its path list as arguments —
+  `[ -n "$GATE_PATHS" ] && jj restore --from "$EVAL_ID" --to @ -- $GATE_PATHS` — because
   `xargs -r jj restore …` prompts on every call. The `s` session grant does not fix it either: a
   command carrying a `$VAR` word is offered as the whole literal command, so the next spelling asks
-  again. `yoloMode` is the only config-level escape and it is global.
+  again. The landing itself is `deccy record --from "$HANDLE" --to "$TARGET"`; optional `[path...]`
+  arguments assert the changed landable set exactly. `yoloMode` is the only config-level escape and
+  it is global.
 - **Plain `pi` is unguarded.** The root policy requires `deccy-pi` (or an explicit `DECCY_ROLE`
   plus `DECCY_ROLE_FILE` and the extension). A plain `pi` session has no deccy role and no deccy
   policy.
@@ -384,10 +406,15 @@ rather than replacing a package at a different version.
 
 ### Changing the state root
 
-All five role files anchor their write scopes to `~/.local/share/deccy/agent/`. Setting
+All five role files anchor their state write scopes to `~/.local/share/deccy/agent/`. Setting
 `DECCY_AGENT_ROOT` moves the state but **not** the policy: update the `permission.write` and
 `permission.edit` paths in every `pi/agents/deccy-*.md` to match, or the round will be denied at
 the workspace boundary. The same caveat already applies to the OpenCode, Claude and Codex ports.
+
+The CLI draft root is separate from `DECCY_AGENT_ROOT`: `deccy draft` puts workspaces under
+`$HOME/.local/share/deccy/workspaces/<repository-namespace>/<handle>`, outside both the repository
+and the agent state root. The gate-author, drafter and judge policies allow
+`~/.local/share/deccy/workspaces/*/*`; keep `$HOME` canonical so that glob matches the CLI's path.
 
 Keep the home and state root on their **canonical** paths. The permission system canonicalizes tool
 paths (resolving symlinks) before matching, while a `~` pattern expands to `$HOME` as written. If

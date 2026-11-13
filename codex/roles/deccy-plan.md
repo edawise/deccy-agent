@@ -36,9 +36,10 @@ table**, breadth only:
 
 - base, the seeds you read, scope, and explicit exclusions;
 - one row per node: local handle, `new` or `refine <existing id>`, the decision in one sentence,
-  `on` (recorded ids or earlier handles; for a refine, `existing` plus any prerequisites the refine
-  adds), gate action (`new` / `reuse <id>` / `amend <id>`), the paths the unit may write, any fork,
-  and the recorded clause that licenses it;
+  `on` (the decisions the row takes as given; recorded ids or earlier handles; for a refine,
+  `existing` plus any decisions the refine takes as given), gate action (`new` / `reuse <id>` /
+  `amend <id>`), the paths the unit may write, any fork, and the recorded clause it elaborates
+  (a citation, not an edge);
 - open questions and stop conditions.
 
 Do **not** include gate forms, red commands, green conditions, or per-unit prose. Those belong to
@@ -66,20 +67,23 @@ the user's answer, put the question in your final message; Codex has no separate
   its evaluation, or use `new` when it adds an edge that needs its own evaluation.
 - `refine <id>` edits an existing decision and may add a `depends_on` edge to it. A new edge needs
   I4 coverage: the row's gate action is `amend <id>` or `new`, never `reuse` unless the existing
-  evaluation already depends on the new prerequisite and checks the use. If it needs a different
+  evaluation already depends on the new standard and checks the addition. If it needs a different
   commitment or a new node, it is `new`.
+- A row that restates an existing decision is not a new row: refine the owner, or reverse the edge
+  when the row is the explicit standard the artifact takes as given.
 - Each row names the paths it may write: the decision's `ref` files and the new gate's
   test/criteria paths. The node file is implicit. Use a directory prefix when the exact test path
   depends on the gate form the author has not chosen yet. Two rows may not share a path unless one
   is an ancestor of the other; a shared path is never a reason to run them in parallel.
-- A row is included only if a recorded clause licenses it. Name the node and quote the clause.
+- A row is included only if it is in scope and its `on` set is what it takes as given. Name the
+  recorded decision it elaborates; that citation is not an edge.
 - A fork must be chosen at approval, or its dependants move to the next layer: all skeletons are
   created before any workspace opens.
 - Keep the layer within `max_units_per_layer` (default 12; `0` unlimited). Split a larger frontier.
 
 ## Stop conditions
 
-- A needed decision is not licensed by anything recorded: stop and ask.
+- A row presupposes a decision that is not recorded: stop and ask.
 - A row needs a decision outside the seeds or scope: report it as the next layer's seed.
 - Two rows describe one commitment: merge them.
 - A refine target carries a different commitment: split it into a `new` row.

@@ -6,17 +6,19 @@ file is the evidence standard.
 
 ## Why clean-room
 
-The drafter’s workspace contains the drafter’s runs, environment changes and possibly edits to the
-gate. Running the gate there proves only that the drafter’s workspace passes. The judge creates
-workspaces **at the decision node** and applies the gate and the candidate itself:
+The drafter's workspace contains the drafter's runs, environment changes and possibly edits to the
+gate. Running the gate there proves only that the drafter's workspace passes. The judge opens two
+clean `deccy draft`s **at the decision node** and applies the gate and the candidate itself:
 
 ```text
 base workspace:       decision node + gate paths            -> must be red
 candidate workspace:  decision node + gate paths + draft     -> must be green
 ```
 
-The decision node is the base. The gate paths belong to the evaluation node and are restored from
-`$EVAL_ID`; the candidate paths are restored from `$DRAFT`. Nothing else is copied.
+The decision node is the base. The topology restack puts a **new** evaluation after the decision; an amended existing evaluation
+is normally an ancestor. Restore the frozen gate paths from `$EVAL_ID` into both drafts uniformly
+(a no-op when they are already present). The candidate paths are restored from
+`$DRAFT`. Nothing else is copied. End both drafts with `deccy discard` before the landing.
 
 ## Refine candidates
 
@@ -24,13 +26,14 @@ A refine edits an existing decision. The clean-room shape is the same, with thre
 
 - the base is the **existing target’s current state**, not a new decision skeleton;
 - the candidate paths are the **landable** set (target node + refs), not the raw draft diff; the
-  drafter’s workspace also contains gate paths restored for running, and those are not candidate
+  drafter's workspace also contains gate paths restored for running, and those are not candidate
   edits;
 - if the gate was **amended or newly created for the refine**, the hash must be the new frozen
   hash; any verdict based on the old gate is void.
 
-Restore the gate paths from `$EVAL_ID` into both base and candidate. Restore only `$DRAFT_PATHS`
-(landable) from the draft into the candidate. If the draft’s landable set contains a gate path, the
+A new evaluation is a child after the restack and an amended existing evaluation is normally an
+ancestor; restore the frozen gate paths from `$EVAL_ID` into both drafts uniformly. Restore only `$DRAFT_PATHS` (landable) from the draft into the
+candidate. If the draft’s landable set contains a gate path, the
 draft edited or is trying to land the gate: **gate integrity: broken**. If a reused gate already
 passes on the target’s current state and the refine is meant to change behavior, the gate is not
 red; report **gate strength: weak** and let the user decide (or the gate author amend), unless the
@@ -48,6 +51,9 @@ Before believing a green run:
    convenient command.
 4. **Same subject.** The candidate paths must be the decision’s ownership, not another node’s ref
    files. A candidate that passes by changing a prerequisite is not a candidate.
+5. **Direction.** `E.evaluates` is the subject and `E.depends_on` is the standard. If the gate
+   depends on its own subject, or the subject is the explicit form of the standard’s artifact, the
+   gate is attached to the wrong endpoint: verdict **gate-integrity**.
 
 ## Base-red
 
@@ -84,7 +90,7 @@ Run the green command on the decision node plus the gate plus the candidate. It 
 The gate run is necessary, not sufficient. Try at least one of:
 
 - **Mutation:** change one line of the candidate to a plausible wrong behavior; the gate should
-  fail. Restore the candidate after (the judge workspace is disposable).
+  fail. Restore the candidate after (the judge draft is disposable).
 - **Negative case:** the boundary the decision says must be rejected; it should be rejected.
 - **Base copy:** use the base content instead of the candidate; the gate should be red. This
   catches a vacuous gate.
@@ -122,7 +128,7 @@ Judge each candidate independently against the same frozen gate:
 
 Quote commands and outputs. “Tests pass” is not evidence; the command, the relevant output and the
 gate hash are. If output is long, quote the failing/passing assertion and the exit status, and
-keep the full log in the judge workspace.
+keep the full log in the judge draft.
 
 Never write the verdict into a node. The graph records the check; the round report records the
 verdict (I5).

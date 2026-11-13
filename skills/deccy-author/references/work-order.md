@@ -5,10 +5,11 @@
 > *run the already-authored gate on the base if asked*. The drafter implements green and never
 > writes or edits the gate. The planner owns descent; the orchestrator owns recording.
 >
-> **Refine.** For a refine unit the base is the existing target’s current state, the draft is based
-> at the target, and the gate paths are restored into the draft for running only. The landable set
-> is the draft diff minus the gate paths. A refine does not create a decision node; it may add the
-> `depends_on` edge the plan names, which needs its own covering gate.
+> **Refine.** For a refine unit the base is the existing target's current state, the draft is
+> `deccy draft <target>`, and any missing gate paths are restored into the draft for running only.
+> The landable set is the draft diff minus the gate paths. A refine does not create a decision node;
+> it may add the `depends_on` edge the plan names, which needs its own covering gate. The gate is
+> normally an ancestor of the target because `--evaluates` inserts it before the subject.
 
 The graph fixes *what* is decided and *what* checks it. This file fixes **when**: work descends
 through the decision graph, and every edge is gated before the dependent that uses it is built.
@@ -46,8 +47,9 @@ is reported, not visited.
 For each decision in that order:
 
 1. **Structure.** The orchestrator places the nodes and `depends_on` edges the order needs, before
-   their dependents (`deccy new --on ...` for new nodes, `deccy record` edits for rewired edges).
-   The drafter does not run these verbs.
+   their dependents (`deccy new --on ...` for new decisions, `deccy new --on ... --evaluates ...`
+   for the covering checks, `deccy record` edits for rewired edges). The drafter does not run these
+   verbs or open drafts.
 2. **Gate.** Confirm the evaluation(s) covering the edges this decision will use are already
    recorded and hash-frozen: criterion in words, test path if it has one. A missing or unfrozen
    gate stops the draft.

@@ -1,12 +1,10 @@
 # code-to-code — test
 
-An artifact-bearing node uses an artifact-bearing prerequisite. Three edges live here:
+An artifact-bearing node takes an artifact-bearing prerequisite as given. Two edges live here:
 
 1. **Implementation to implementation** — the dependent's artifact must honor the
    prerequisite's artifact's contract (APIs, schemas, protocols).
-2. **Adoption** — a decision names an evaluation in `depends_on` ("this implementation
-   adopts this suite as its gate"); the artifact must really satisfy the suite.
-3. **Eval chains** — a suite's use of what it checks is sound (`evaluates` targeting an
+2. **Eval chains** — a suite's check of what it evaluates is sound (`evaluates` targeting an
    evaluation). Rare; use only when the check is load-bearing enough to need a check.
 
 ## The check

@@ -8,8 +8,9 @@ This check is copied verbatim as the evaluation criterion. It runs at check time
 against the two recorded nodes; naming happens in the check's output, never in
 the criterion:
 
-1. License: no element of the dependent contradicts the prerequisite. Fail on any
-   contradicting element — name the element.
+1. Non-contradiction and non-re-decision: no element of the dependent contradicts
+   or re-decides the prerequisite. Fail on any contradicting or re-decided element — name the element.
+   The dependent needs alignment with the prerequisite, not permission from it.
 
 ## Forbidden
 

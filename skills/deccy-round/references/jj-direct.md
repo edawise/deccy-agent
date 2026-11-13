@@ -1,194 +1,195 @@
-# jj-direct draft workspaces
+# Draft workspaces (deccy-cli v0.2.2)
 
-The prototype uses jj workspaces for isolation, but jj never writes the graph. `deccy new` and
-`deccy record` remain the only graph writers. This file records the exact raw-jj surface and the
-traps found while prototyping on jj 0.45.1.
+The round uses the CLI's draft lifecycle for isolation. The CLI writes the graph, the workspace and
+the draft record; jj never writes the graph. This file records the exact surface and the traps found
+while running the round on deccy-cli 0.2.2 with jj 0.45.x.
 
 ## The model
 
 ```text
-trunk @  (or a landing buffer)
+trunk @  (the round-tip change)
    |
    +-- decision node D
    |      |
-   |      +-- gate evaluation E   (child of the prerequisite, evaluates D)
+   |      +-- gate evaluation E   (a child of D after the topology restack)
    |
-   +-- draft workspace @          (child of E for an implementation draft)
+   +-- draft workspace @          (a child of D, with E's gate paths restored)
+         |
+         +-- .deccy/work/<handle>.json   (open -> landed)
 ```
 
-A workspace created with `jj workspace add -r <base>` gets a **new working-copy commit** whose
-parent is `<base>`. That working-copy commit is the draft. It is not a child of the trunk’s `@`
-unless `<base>` is the trunk tip; it is a normal commit in the same repository.
+A draft is **two things**:
 
-The draft’s changed paths are the diff of the workspace’s `@` against its parent(s):
+- a jj workspace at `~/.local/share/deccy/workspaces/<repository-namespace>/<handle>`, whose `@` is
+  a child of the named node's change;
+- a record at `.deccy/work/<handle>.json` in the trunk, with `state` (`open` / `landed`), `node`,
+  `edit`, `workspace` and `base` (one content identity per owned path).
+
+`deccy drafts` is the record oracle; `jj workspace list` is the workspace oracle. They must agree
+except for a `drifted` row, which is a stop.
+
+## Opening
+
+```sh
+cd <repo-root>
+read -r HANDLE WS <<EOF
+$(deccy draft <node-id> --edit "$ROUND_EDIT")
+EOF
+```
+
+- `deccy draft` prints one `<handle> <workspace path>` line per named node, in the order given.
+- A node named twice opens two drafts. Alternatives are two calls on the same node.
+- The workspace's `@` is a child of `<node-id>`: the node's content and all its ancestors are in the
+  tree. For an implementation draft, `deccy draft <decision>` carries the decision skeleton and its
+  prerequisites; for a refine, `deccy draft <target>` carries the target's current state. For a gate,
+  `deccy draft <evaluation>` carries the evaluation's skeleton and its prerequisites.
+- The evaluation is a **child** of its subject after the topology restack (§5.5), so an
+  implementation draft does not carry the gate. Restore the frozen gate paths into it for running;
+  they are not landable.
+- Open from the **trunk**, and pass `--edit "$ROUND_EDIT"` — the round's empty working-copy change.
+  The default `edit` is the invoking change; after a skeleton pass that may be a node.
+- The workspace root is fixed by the CLI (`$HOME/.local/share/deccy/workspaces/...`). Do not move
+  it; the guards allow that root. A draft workspace is never inside the repository: the trunk
+  working copy would see its files and `jj diff` would report `.deccy/...` paths.
+- Opening writes no graph state and no marker. `deccy undo` does not undo it.
+
+## Working in a draft
+
+Run jj from **inside** the workspace:
 
 ```sh
 cd "$WS"
-jj diff --summary -r @
+jj workspace update-stale      # after any landing below/above
+jj status                      # snapshot; makes edits visible to other workspaces
+jj diff --summary -r @         # the draft's changed paths
 ```
 
-## Allowed in the prototype
+The draft is the workspace's `@`. Do not run `jj new` inside it: a child change would redefine what
+"the draft" means. Do not hand-edit `.deccy/work/*.json`; the CLI owns the registry.
+
+For an **implementation draft** (new unit or refine), restored gate paths are for running only:
+
+```sh
+[ -n "$GATE_PATHS" ] && jj restore --from "$EVAL_ID" --to @ -- $GATE_PATHS
+```
+
+The evaluation follows its subject after the restack, so the gate is not in the draft tree. Never
+edit a gate path, and never land one: the CLI's landable set is the subject's owned set plus refs
+its node document adds.
+
+## Landing
+
+```sh
+cd <repo-root>
+deccy record --from "$HANDLE" --to "$TARGET"
+deccy validate
+jj workspace forget "draft-$HANDLE"
+```
+
+- `record --from` is the only landing path. It reads the draft workspace, compares the changed
+  landable set with the target, squashes the draft's `@` into the target, and turns the record
+  `landed`. Success is silent.
+- The **landable set** is the target's current owned set (node JSON + `ref` paths) unioned with the
+  `ref` paths the draft's node document adds. A new ref lands in the same call as the node JSON;
+  do not split it. `deccy undo` removes the added path as part of the same recording.
+- Optional paths assert the changed landable set exactly. Use `$DRAFT_PATHS` when paths are simple;
+  the CLI quotes nothing, so a path with spaces is best left out of the assertion.
+- The landing keeps the destination's summary (`--use-destination-message`); the node's description
+  is unchanged.
+- `record --from` refuses a stale draft: an open record naming the same node whose base differs from
+  the node's current owned content. It names the handle and the differing paths. Discard it and
+  re-open; never `jj squash` or `jj restore` around the refusal.
+- The draft workspace's `@` becomes an empty change. `deccy discard` refuses a landed record, so
+  forget the workspace with `jj workspace forget "draft-$HANDLE"` and let the close-out cleanup
+  abandon the empty head. The landed record stays in `.deccy/work` (v0.2.2 has no prune verb).
+
+## Discarding
+
+```sh
+cd <repo-root>
+deccy discard "$HANDLE" ["$HANDLE"...]
+```
+
+Run from the trunk. It ends each **open** draft without landing it: abandons the workspace's change,
+forgets the workspace, removes the directory, removes the record. A handle that names no open record
+refuses the whole call before anything is touched. Use it for rejected candidates, losing
+alternatives, check drafts and judge drafts. It writes no marker, so it is not an undo unit.
+
+## Refreshing after a landing
+
+A landing rewrites every change above the target. Every other open draft may be stale:
+
+```sh
+cd "$WS"
+jj workspace update-stale
+jj status
+jj diff --summary -r @        # must still be the draft you think it is
+```
+
+Then re-run its gate. A conflict means the draft was built on a base that no longer exists: discard
+it and open a fresh draft from the current node.
+
+## Allowed raw jj
 
 | Command | Use |
 |---|---|
-| `jj workspace add <path> --name <name> -r <base>` | open a draft |
-| `jj workspace list` | see open drafts and stale state |
-| `jj workspace forget <name>` | drop a draft; check for an empty leftover head |
+| `jj workspace list` | see open workspaces and stale state |
+| `jj workspace update-stale` | refresh a draft after a landing |
+| `jj workspace forget "draft-<handle>"` | drop a **landed** draft's workspace |
+| `jj rebase -s <prereq> -B <dependent>` (trunk only) | restack a topology inversion; the checker prints the command |
+| `jj new <target>` (trunk only) | move `@` to an empty round-tip change |
+| `jj restore --from <eval> --to @ -- <gate-paths>` (refine/judge draft) | add the frozen gate test for running; not landable |
+| `jj restore --from <draft> --to @ -- <draft-paths>` (judge candidate) | copy the candidate into a clean judge draft |
+| `jj status`, `jj diff`, `jj show`, `jj file show`, `jj log` | read and snapshot |
 | `scripts/set-round-tip.sh` | after the last landing, put `@` above the highest landed node change |
-| `scripts/abandon-empty-heads.sh [--force-stray] [--force-superseded]` | the only abandon path: verified stray heads; `--force-stray` also accepts a head whose every changed path is a byte-identical restore of an existing node's own content (its document or a path its `content.ref` lists); `--force-superseded` accepts a head whose every changed path is an existing `nodes/<owner>.json` and which jj reports as conflicted |
-| `jj workspace update-stale` | refresh a workspace after the trunk moved |
-| `jj status` | snapshot the draft and show changes |
-| `jj diff --summary -r @` | list the draft’s changed paths |
-| `jj log -r @ --no-graph -T 'change_id.shortest(8)'` | read the draft change id |
-| `jj show`, `jj file show` | read content |
-| `jj new <target>` (trunk only) | create a landing buffer child of the target |
-| `jj rebase -s <prereq> -B <dependent>` (trunk only) | restack a topology inversion; the checker prints the exact command |
-| `jj restore --from <draft> --to @ -- <paths>` (trunk only) | copy the draft’s content into the buffer |
-| `jj restore --from <eval> --to @ -- <gate-paths>` (refine draft) | add the frozen gate test for running; not landable |
+| `scripts/abandon-empty-heads.sh [--force-stray] [--force-superseded]` | the only abandon path: verified stray heads |
 
-## Forbidden in the prototype
+## Forbidden
 
-- `jj new -A` — reparents every child and makes open workspaces stale. `deccy new` owns it.
+- `jj new -A` — reparents every child and makes open drafts stale. `deccy new` owns it.
 - `jj squash`, `jj split`, `jj metaedit`, `jj undo`, `jj op` — graph surgery.
   `deccy record`/`remove`/`undo` own it.
+- `jj abandon` — except through `scripts/abandon-empty-heads.sh`; never run it directly.
+- `jj workspace add` — `deccy draft` owns workspace creation, the record and the base.
 - `jj describe` — except the summary-only orchestrator exception below. It never changes node
   content or edges.
-- `jj abandon` — except through `scripts/abandon-empty-heads.sh`; never run `jj abandon`
-  directly.
+- `jj new` inside a draft workspace — it creates a child change; the draft is the workspace's `@`.
+- Hand-editing `.deccy/work/*.json` — the CLI is the only registry writer.
+- `deccy new`/`record`/`remove` from a draft workspace — only the orchestrator runs them, from the
+  trunk. `deccy draft`/`drafts`/`discard` work from a linked workspace, but `record --from` and
+  `discard` are trunk operations.
+- Renames in a draft — `jj diff --summary` reports a rename as one `{old => new}` field, and the
+  landing path set becomes ambiguous. Use add + delete.
+- Workspaces inside the repository (including `deccy/workspaces/`) — the trunk working copy sees
+  their files, and jj reports paths like `.deccy/...` instead of `f.txt`.
 
 ## Orchestrator-only exceptions
 
 The orchestrator, and only the orchestrator, may use these:
 
 - `jj rebase -s <prereq> -B <dependent>` — restack a topology inversion reported by
-  `check-topology.py`. Use the command the checker prints, re-run the checker until clean, and
-  never use it to force a fork or touch a frozen gate; change ids survive the move.
-- `jj describe -m "<summary>" <id>` — change a landed node's summary after a landing. This is
-  the one raw-jj exception recorded in `deccy-core/references/cli.md`: summary only, never
-  content or edges, and never before the content is judged and landed.
+  `check-topology.py`. Use the command the checker prints, re-run the checker until clean, and never
+  use it to force a fork or touch a frozen gate; change ids survive the move.
+- `jj describe -m "<summary>" <id>` — change a landed node's summary after a landing. Summary only,
+  never content or edges, and never before the content is judged and landed.
 - `scripts/set-round-tip.sh` — after the last landing, start an empty change above the node change
-  that no other node change descends from. `jj new <target>` alone leaves the target's gate as a
-  sibling head.
+  that no other node change descends from. `jj new <target>` alone can leave a gate sibling.
 - `scripts/abandon-empty-heads.sh --force-stray --force-superseded` — after a landing, abandon a
   head whose every changed path is a byte-identical restore of content an existing node owns (its
   document or a path its `content.ref` lists), or a conflicted copy of existing node documents
   (`--force-superseded`; a conflicted tree can never be recorded). The script still refuses the
   working copy, open workspaces, bookmarked or described heads, node changes, and any other
   non-empty diff. Direct `jj abandon` remains forbidden.
-- `jj restore` without `--from <draft> --to @` — it can wipe the working copy.
-- `jj new` inside a draft workspace — it creates a child change; the draft is the workspace’s
-  `@`, and adding a child changes what “the draft” means.
-- `deccy new`/`record`/`remove` from a draft workspace — only the orchestrator runs them, from the
-  trunk.
-- Renames in a draft — `jj diff --summary` reports a rename as one `{old => new}` field, and the
-  landing path set becomes ambiguous. Use add + delete.
-- Paths with spaces or glob characters in a draft — the landing expands `$PATHS` unquoted, so it
-  splits on whitespace. Keep draft paths simple; the final CLI will handle arbitrary paths.
-- Workspaces inside the repository (including `.deccy/workspaces/`) — the trunk working copy sees
-  their files, and jj reports paths like `.deccy/workspaces/.../f.txt` instead of `f.txt`.
-
-## Workspace location and paths
-
-Use a root outside the repo:
-
-```sh
-ROOT="$HOME/.local/share/deccy/agent"
-WS="$ROOT/workspaces/drafts/$ROUND/$HANDLE"
-```
-
-Run jj **from inside the workspace**:
-
-```sh
-cd "$WS"
-jj status
-jj diff --summary -r @
-```
-
-Running `jj -R "$WS"` from the trunk can resolve to the trunk repository and report
-non-repo-relative paths (`../.../f.txt`). `cd` is the reliable form.
-
-The workspace’s tracked paths are relative to its own root, which is also the repository’s path
-set for the files it carries. A file at `<repo>/src/foo.ts` appears as `src/foo.ts` from inside
-the workspace and in `jj diff -r <draft-change>` from the trunk.
-
-## Stale workspaces
-
-`deccy init` sets `snapshot.auto-update-stale=false`. After any trunk mutation (recording a gate,
-recording the chosen implementation), every other open workspace may be stale:
-
-```sh
-cd "$WS"
-jj workspace update-stale
-jj status
-```
-
-If the update reports a conflict against the new base, the draft was built on a base that no
-longer exists. Do not resolve it by hand: forget the workspace and re-open a fresh draft from the
-current gate. This is the prototype’s stand-in for the final `record --from` base check.
-
-## Refine drafts
-
-A refine edits an existing target, so base the workspace at the **target**, not at the gate:
-
-```sh
-jj workspace add "$WS" --name "$NAME" -r "$TARGET_ID"
-cd "$WS"
-[ -n "$GATE_PATHS" ] && jj restore --from "$EVAL_ID" --to @ -- $GATE_PATHS
-```
-
-The target’s current node and refs are in `@-`; the gate test is restored into `@` for running
-only. `jj diff --summary -r @` will therefore include the gate paths (if they were not already in
-the target tree). They are **not landable**:
-
-```sh
-PATHS=$(jj diff --summary -r @ | sed -n 's/^[A-Z] //p')
-LANDABLE_PATHS=$(printf '%s\n' "$PATHS" | grep -vxF -f <(printf '%s\n' "$GATE_PATHS" | sed '/^$/d') || true)
-```
-
-The subtraction uses bash/zsh process substitution; run it in bash or zsh, not a POSIX-only shell.
-
-Land only `LANDABLE_PATHS`; the gate paths stay in the evaluation. A gate path in the landable set
-means the draft edited the gate (or the subtraction failed): stop and re-judge. A path outside the
-target’s `ref` is a custody violation.
-
-## Landing
-
-The landing buffer is a new child of the target node in the trunk. For a refine, `PATHS` here means
-the landable set from the section above:
-
-```sh
-jj new "$TARGET"
-[ -n "$PATHS" ] && jj restore --from "$DRAFT" --to @ -- $PATHS
-[ -n "$PATHS" ] && deccy record $PATHS --to "$TARGET"
-jj workspace forget "$NAME"
-jj new "$TARGET"
-```
-
-The list travels as arguments, never through a wrapper (`xargs`, `sh -c`, `env`, …). Claude and
-Codex deny a wrapper's command; Pi floors any wrapper to a permission prompt on *every* call, so no
-role policy can pre-approve it. The `[ -n ... ]` test is not cosmetic: an empty list would make
-`jj restore --from <id> --to @ --` restore the whole change.
-
-`deccy record` runs `jj squash --into <target>` internally, so the graph write stays in the CLI.
-`jj workspace forget` removes the workspace, but not reliably its working-copy commit: a draft
-forgotten while it still carried content can survive as an empty head. After all drafts are
-forgotten, run `scripts/set-round-tip.sh`, then `scripts/abandon-empty-heads.sh`; it abandons only verified empty, undescribed,
-unbookmarked, non-open-workspace, non-node heads and requires exactly one head afterwards. Do not run `jj abandon` directly.
-If the draft has descendants (it should not), forget leaves them behind — another reason not to run
-`jj new` inside a draft.
-
-**New refs.** `deccy record` checks ownership against the target’s **current** document. A draft
-that adds a new file must either have it already in the target’s current `ref` or land in two
-records: the node file first, then the new path. The node-file record updates `ref`; the second
-record is then owned. Do not use `jj squash` to bypass the refusal.
+- `jj workspace forget` — only for a **landed** draft whose record `deccy drafts` shows `landed`.
+  An open draft is ended with `deccy discard`, not forgotten.
 
 ## Recovery
 
-- **Session died:** `jj workspace list`; the workspace and draft change survive. `cd` in,
-  `jj status`, continue.
-- **Draft no longer needed:** `jj workspace forget <name>`, then run
-  `scripts/abandon-empty-heads.sh` (never `jj abandon` directly), then remove the directory.
-- **Lost track of a draft:** `jj workspace list`; `cd <path> && jj log -r @`; the name encodes the
-  round and handle.
-- **Trunk moved unexpectedly:** stop; the round barrier was violated. Update-stale every open
-  workspace, inspect the diff, and re-plan rather than restoring a stale tree.
+- **Session died:** `deccy drafts`; the record and workspace survive. `cd` into the workspace,
+  `jj status`, `jj workspace update-stale`, continue.
+- **Draft no longer needed:** `deccy discard <handle>` from the trunk. If it is already landed,
+  `jj workspace forget "draft-<handle>"` and run the cleanup scripts.
+- **Lost track of a draft:** `deccy drafts` lists handle, state, workspace name and path. A
+  `drifted` open record has no jj workspace; discard it and re-open.
+- **Trunk moved unexpectedly:** stop; the round barrier was violated. Update-stale every open draft,
+  inspect the diff, and re-plan rather than restoring a stale tree.
