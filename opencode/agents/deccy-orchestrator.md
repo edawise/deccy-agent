@@ -63,7 +63,7 @@ permissions:
     resource: "~/.opencode/plan/*"
     effect: allow
   # The only graph surgery allowed is the CLI's; raw jj is limited to workspace
-  # listing/forgetting, inspection, a topology restack (`jj rebase -s ... -B ...`),
+  # listing/forgetting, inspection, a topology restack (`jj rebase -r ... -A ...`),
   # and the summary-only describe exception below. Drafts are opened, landed and
   # discarded with `deccy draft` / `deccy record --from` / `deccy discard`.
   - action: shell
@@ -74,6 +74,12 @@ permissions:
     effect: deny
   - action: shell
     resource: "jj rebase *"
+    effect: deny
+  - action: shell
+    resource: "jj rebase -r *"
+    effect: allow
+  - action: shell
+    resource: "jj rebase --revisions *"
     effect: allow
   - action: shell
     resource: "jj describe *"
@@ -250,7 +256,7 @@ Follow `references/round-protocol.md` in `deccy-round`. In order:
    edge must amend an evaluation or add one. A gate-author defect stops the unit; a judge
    `gate-weak` advisory does not. Once every gate in the component is recorded and frozen, run
    `check-topology.py` and restack every inversion with the printed
-   `jj rebase -s <prereq> -B <dependent>` before opening an implementation draft. Then run
+   `jj rebase -r <dependent> -A <prereq>` before opening an implementation draft. Then run
    `~/.config/opencode/skills/deccy-round/scripts/set-round-tip.sh` and re-check with the full
    tree; repeat until a clean check with `@` at the tip. This is the one raw-jj history move you
    may make.
@@ -346,7 +352,7 @@ draft. The gate author and drafter must never run `deccy draft` or `deccy discar
   stale: `deccy discard` it and rebuild from the current gate.
 - **No raw graph surgery.** The allowed raw jj is `workspace list/forget`,
   `status/diff/show/log`, `restore --from <gate|draft> --to @` for refine/judge staging (never as a
-  landing path), `rebase -s <prereq> -B <dependent>` for a topology inversion the checker reports,
+  landing path), `rebase -r <dependent> -A <prereq>` for a topology inversion the checker reports,
   `workspace update-stale`, and `describe -m "<summary>" <id>` for a change summary only.
   Never `jj new -A`, `jj squash`, `jj op`, `jj split`, `jj metaedit`, `jj undo`, or `jj abandon`
   directly, and never `jj workspace add`: `deccy draft` owns workspace creation, the record and the

@@ -136,7 +136,7 @@ it and open a fresh draft from the current node.
 | `jj workspace list` | see open workspaces and stale state |
 | `jj workspace update-stale` | refresh a draft after a landing |
 | `jj workspace forget "draft-<handle>"` | drop a **landed** draft's workspace |
-| `jj rebase -s <prereq> -B <dependent>` (trunk only) | restack a topology inversion; the checker prints the command |
+| `jj rebase -r <dependent> -A <prereq>` (trunk only) | restack a topology inversion; the checker prints the command |
 | `jj new <target>` (trunk only) | move `@` to an empty round-tip change |
 | `jj restore --from <eval> --to @ -- <gate-paths>` (refine/judge draft) | add the frozen gate test for running; not landable |
 | `jj restore --from <draft> --to @ -- <draft-paths>` (judge candidate) | copy the candidate into a clean judge draft |
@@ -167,7 +167,7 @@ it and open a fresh draft from the current node.
 
 The orchestrator, and only the orchestrator, may use these:
 
-- `jj rebase -s <prereq> -B <dependent>` — restack a topology inversion reported by
+- `jj rebase -r <dependent> -A <prereq>` — restack a topology inversion reported by
   `check-topology.py`. Use the command the checker prints, re-run the checker until clean, and never
   use it to force a fork or touch a frozen gate; change ids survive the move.
 - `jj describe -m "<summary>" <id>` — change a landed node's summary after a landing. Summary only,

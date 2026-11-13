@@ -138,8 +138,8 @@ Full commands and failure handling: `references/round-protocol.md`; jj gotchas:
    `deccy record --from "$HANDLE" --to "$EVAL_ID"`, then refresh every open draft and hash-freeze.
    A reused gate is verified and frozen without a draft. An amended gate, or a new evaluation, for a
    refine follows the target-check-draft rule. After every gate in the component is landed and
-   frozen, run `check-topology.py` and restack every inversion with the printed `jj rebase -s
-   <prereq> -B <dependent>` before opening any implementation draft; then `set-round-tip.sh` and
+   frozen, run `check-topology.py` and restack every inversion with the printed `jj rebase -r
+   <dependent> -A <prereq>` before opening any implementation draft; then `set-round-tip.sh` and
    re-check with the full tree. This is the one raw-jj history move. A gate-author defect stops that
    unit; a judge `gate-weak` advisory does not.
 5. **Implementation drafts.** For a new unit, `deccy draft "$DECISION_ID"`; for a refine,

@@ -94,7 +94,7 @@ Follow `references/round-protocol.md` in the `deccy-round` skill directory read 
    for the red run only; it is evidence, and you `deccy discard` it afterwards. A gate-author defect stops the unit; a judge `gate-weak`
    advisory does not. Once every gate in the component is landed and frozen, run
    `check-topology.py` and restack every inversion with the printed
-   `jj rebase -s <prereq> -B <dependent>` before opening an implementation draft. Then run
+   `jj rebase -r <dependent> -A <prereq>` before opening an implementation draft. Then run
    `$DECCY_SKILLS/deccy-round/scripts/set-round-tip.sh` and re-check with the full tree; repeat
    until a clean check with `@` at the tip. This is the one raw-jj history move you may make.
 5. **Implementation drafts.** For a new unit, open the draft at the decision with
@@ -257,7 +257,7 @@ children have reported.
   `workspace forget draft-<handle>` (landed only), `status/diff/show/log`, `new <target>` and
   `set-round-tip.sh` for the round tip, `restore --from <eval> --to @ -- <gate-paths>` in a
   refine/gate check draft, `restore --from <draft> --to @ -- <draft-paths>` in a judge candidate
-  draft, `rebase -s <prereq> -B <dependent>` for a topology inversion the checker reports, and
+  draft, `rebase -r <dependent> -A <prereq>` for a topology inversion the checker reports, and
   `describe -m "<summary>" <id>` for a change summary only. Never `jj workspace add` (use
   `deccy draft`), never hand-edit `.deccy/work/*.json`, and never `jj new -A`, `squash`, `op`,
   `split`, `metaedit`, `undo`, or `jj abandon` directly. Summaries are the one `jj describe`

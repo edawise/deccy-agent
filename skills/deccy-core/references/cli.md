@@ -272,7 +272,7 @@ by design edits files outside the target's eventual ownership.
 
 Both are diagnostics: they read `jj` history and report. The dependency story the graph records
 lives in its edges, and `deccy new --on` positions new nodes correctly by construction. If
-`check-topology.py` reports an inversion, fix it with `jj rebase -s <prereq> -B <dependent>` and
+`check-topology.py` reports an inversion, fix it with `jj rebase -r <dependent> -A <prereq>` and
 re-run the checker.
 
 ## Recover
@@ -298,7 +298,7 @@ resort for a mistaken graph write. For orientation you may still read `jj` direc
 - A draft is authored in its own workspace and landed with `record --from`; do not hand-roll the
   squash, restore or registry.
 - Keep the stack topologically sorted: after adding or rewiring any `depends_on` edge, check that
-  every prerequisite precedes its dependent, and restack with `jj rebase -s <prereq> -B
-  <dependent>` if it does not (change ids survive the move, so edges are untouched).
+  every prerequisite precedes its dependent, and restack with `jj rebase -r <dependent> -A
+  <prereq>` if it does not (change ids survive the move, so edges are untouched).
 - `deccy drafts` is the draft oracle; `jj workspace list` is the workspace oracle. They must agree
   except for a `drifted` row, which is a stop.

@@ -344,7 +344,7 @@ evaluation as an inversion. Restack it before opening any implementation draft:
 
 ```sh
 python3 "$CORE/scripts/check-topology.py"
-jj rebase -s <prereq> -B <dependent>      # the command the checker prints
+jj rebase -r <dependent> -A <prereq>      # the command the checker prints
 python3 "$CORE/scripts/check-topology.py"
 ```
 

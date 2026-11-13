@@ -17,7 +17,9 @@ permission:
     "*": allow
     "jj new -A *": deny
     "jj squash *": deny
-    "jj rebase *": allow
+    "jj rebase *": deny
+    "jj rebase -r *": allow
+    "jj rebase --revisions *": allow
     "jj describe *": deny
     "jj describe -m *": allow
     "jj op *": deny
@@ -142,7 +144,7 @@ Follow `references/round-protocol.md` in the `deccy-round` skill directory read 
    discard it afterwards. The author never opens or discards drafts. A
    gate-author defect stops the unit; a judge `gate-weak` advisory does not. Once every gate in the
    component is recorded and frozen, run `check-topology.py` and restack every inversion with the
-   printed `jj rebase -s <prereq> -B <dependent>` before opening an implementation draft. Then run
+   printed `jj rebase -r <dependent> -A <prereq>` before opening an implementation draft. Then run
    `$DECCY_SKILLS/deccy-round/scripts/set-round-tip.sh` and re-check with the full tree; repeat
    until a clean check with `@` at the tip. This is the one raw-jj history move you may make.
 5. **Implementations.** For a new unit, open the draft at the decision with
@@ -273,7 +275,7 @@ for an answer that cannot arrive, and never assume silence is approval.
   stale: rebuild it from the current gate.
 - **No raw graph surgery.** The allowed raw jj is `workspace list/forget/update-stale`,
   `status/diff/show/log`, `restore --from <eval|draft> --to @` for running/staging only,
-  `rebase -s <prereq> -B <dependent>` for a topology inversion the checker reports, and
+  `rebase -r <dependent> -A <prereq>` for a topology inversion the checker reports, and
   `describe -m "<summary>" <id>` for a change summary only. Draft isolation and landing belong to
   `deccy draft` / `record --from` / `discard`, not to jj. Never `jj workspace add`, `jj new -A`,
   `squash`, `op`, `split`, `metaedit`, `undo`, or `jj abandon` directly.

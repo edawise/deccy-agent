@@ -603,7 +603,7 @@ class OrchestratorShell(Base):
                         '[ -n "$PATHS" ] && jj restore --from "$D" --to @ -- $PATHS',
                         '[ -n "$PATHS" ] && deccy record --from "$H" --to "$TARGET"',
                         "jj describe -m 'summary' abc",
-                        "jj rebase -s abc -B def",
+                        "jj rebase -r abc -A def",
                         "~/.claude/skills/deccy-round/scripts/abandon-empty-heads.sh --dry-run",
                         "/x/deccy-round/scripts/delete-round-state.sh r1",
                         "$DECCY_SKILLS/deccy-round/scripts/abandon-empty-heads.sh --dry-run",
@@ -617,6 +617,7 @@ class OrchestratorShell(Base):
                         "jj describe abc", "jj abandon abc", "jj op restore x",
                         "jj restore src/a.py", "jj undo", "deccy remove x", "deccy init",
                         "git push", "rm -rf x", "mv a b",
+                        "jj rebase -s abc -B def", "jj rebase --source abc -B def", "jj rebase -b abc -o def",
                         "jj workspace add /w --name n -r abc",
                         "sh -c 'jj squash'", "xargs jj abandon"):
             with self.subTest(command=command):
@@ -636,6 +637,7 @@ class DrafterShell(Base):
                 self.assertAllowed(self.as_role(self.R, "Bash", command=command))
         for command in ("jj new", "jj rebase -s a -B b", "jj restore src/a.py",
                         "deccy record x", "git commit -m x",
+                        "jj rebase -s abc -B def", "jj rebase --source abc -B def", "jj rebase -b abc -o def",
                         "jj workspace add /w --name n -r abc", "jj workspace forget n"):
             with self.subTest(command=command):
                 self.assertBlocked(self.as_role(self.R, "Bash", command=command))

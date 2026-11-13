@@ -113,14 +113,15 @@ class Orchestrator(Base):
                   '[ -n "$PATHS" ] && jj restore --from "$D" --to @ -- $PATHS',
                   '[ -n "$PATHS" ] && deccy record --from "$H" --to "$TARGET"',
                   "jj describe -m 'summary' abc",
-                  "jj rebase -s abc -B def",
+                  "jj rebase -r abc -A def",
                   "~/.claude/skills/deccy-round/scripts/abandon-empty-heads.sh --dry-run",
                   "/x/deccy-round/scripts/delete-round-state.sh r1",
                   "printf '%s\\t%s\\n' U2 \"$id\" >> \"$MAP\""):
             self.assertAllowed(self.bash(self.R, c))
 
     def test_surgery_blocked(self):
-        for c in ("jj new -A abc", "jj squash", "jj describe abc",
+        for c in ("jj new -A abc", "jj squash", "jj rebase -s abc -B def",
+                  "jj rebase --source abc -B def", "jj rebase -b abc -o def", "jj describe abc",
                   "jj abandon abc", "jj op restore x", "jj restore src/a.py", "jj undo",
                   "deccy remove x", "deccy init", "git push", "rm -rf x", "mv a b",
                   "jj workspace add /w --name n -r abc",

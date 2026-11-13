@@ -82,7 +82,7 @@ Follow `references/round-protocol.md` in the `deccy-round` skill directory read 
    hand it to the author for the red run only, and discard it with `deccy discard` after. A refine that adds an edge must amend an
    evaluation or add one. A gate-author defect stops the unit; a judge `gate-weak` advisory does
    not. Once every gate in the component is recorded and frozen, run `check-topology.py` and restack
-   every inversion with the printed `jj rebase -s <prereq> -B <dependent>` before opening an
+   every inversion with the printed `jj rebase -r <dependent> -A <prereq>` before opening an
    implementation draft. Then run `~/.claude/skills/deccy-round/scripts/set-round-tip.sh` and
    re-check with the full tree; repeat until a clean check with `@` at the tip. This is the one
    raw-jj history move you may make.
@@ -177,8 +177,8 @@ draft.
   `jj diff`, and re-run the frozen gate before trusting a verdict. A conflict means the draft is
   stale: discard it and rebuild from the current gate.
 - **No raw graph surgery.** The allowed raw jj is `workspace list`, `workspace update-stale`,
-  `workspace forget "draft-<handle>"` for a **landed** draft only, `rebase -s <prereq> -B
-  <dependent>` for a topology inversion the checker reports, `new <target>`/`set-round-tip.sh` for
+  `workspace forget "draft-<handle>"` for a **landed** draft only, `rebase -r <dependent> -A
+  <prereq>` for a topology inversion the checker reports, `new <target>`/`set-round-tip.sh` for
   the round tip, `restore --from <eval> --to @ -- <gate-paths>` in a refine/gate check draft,
   `restore --from <draft> --to @ -- <draft-paths>` for a judge candidate, `describe -m "<summary>"
   <id>` for a change summary only, and the read-only `status`/`diff`/`show`/`file show`/`log`.
