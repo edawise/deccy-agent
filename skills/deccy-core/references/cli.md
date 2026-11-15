@@ -1,9 +1,9 @@
 # deccy graph workflow
 
-> **Version.** This reference is written for **deccy-cli v0.2.2**, which adds `new --evaluates`,
-> the `draft` / `drafts` / `discard` verbs, and the `record --from <handle>` source form. Check
-> `deccy --version` before a round. In v0.2.2 `deccy validate` checks validity, resolution and I4
-> coverage only; topological order and content custody still need the read-only scripts below.
+> **Version.** This reference is written for **deccy-cli v0.2.3**, which adds `new --evaluates`,
+> the `draft` / `drafts` / `discard` verbs, the `record --from <handle>` source form, and makes
+> `validate` check topological order and content custody as well. Check `deccy --version` before a
+> round; below 0.2.3 stops it.
 
 > **Round note.** Only the orchestrator runs the graph-mutating verbs: `new`, `record`, `remove`,
 > `undo` and `redo`. It also opens drafts with `draft` and ends them with `discard`/`record
@@ -31,7 +31,7 @@ draft is not a change in the decision stack until it lands.
 
 ## Requirements
 
-- `deccy` **0.2.2** or newer on `PATH`; `jj` and `git` too.
+- `deccy` **0.2.3** or newer on `PATH`; `jj` and `git` too.
 - The repository is initialised once with `deccy init <path>`; it creates `.jj`, `nodes/` and
   `.deccy/`. Run it before `jj git init`, not after: without `.deccy/`, marker writes fail.
 
@@ -81,7 +81,7 @@ eval=$(deccy new -m "gate: <decision>" --on <dep-id> --on <dep-id> --evaluates "
   `evaluates`.
 - With the decision's own `--on` set, `deccy new` inserts the evaluation **between the
   prerequisites and the decision**. That is the birth order, not the final one: the topology
-  checker wants an evaluation to follow its subject, so a round restacks the evaluation after the
+  check wants an evaluation to follow its subject, so a round restacks the evaluation after the
   decision before implementation. Before the restack the evaluation is an ancestor of the decision
   and its draft does not carry the unbuilt decision; after the restack the evaluation is a child of
   the decision and an implementation draft restores the frozen gate paths for running only.
@@ -246,34 +246,30 @@ node's `depends_on` or a gate's `evaluates` still reaches it. It takes the node'
 ```sh
 deccy log                    # every node: <id> <kind> <summary>
 deccy show <id>...           # a node's stored document as pretty JSON
-deccy validate               # validity, resolution and I4 coverage; silent when clean
+deccy validate               # validity, resolution, coverage, topology, custody; silent when clean
 deccy drafts                 # every draft record with its state and workspace
 ```
 
-For v0.2.2, `deccy validate` prints one `<check> <id> <reason>` line per failure (`validity`,
-`resolution`, `coverage`) and changes nothing. It does **not** check topological order or content
-custody; use the read-only scripts for those:
+`deccy validate` checks five things and changes nothing:
 
-```sh
-CORE="<deccy-core skill base directory>"
-python3 "$CORE/scripts/check-topology.py" [repo-root]    # every prerequisite precedes its dependent
-python3 "$CORE/scripts/check-ref-custody.py" [repo-root] # no change touches another node's content
-```
+| check | line | meaning |
+|---|---|---|
+| validity | `validity <id> <reason>` | a node document is missing, unreadable or violates the schema |
+| resolution | `resolution <id> <reason>` | an edge target does not resolve |
+| coverage | `coverage <dependent> <prerequisite>` | a decision→decision edge has no I4 evaluation |
+| topology | `topology <dependent> <prerequisite>` | the prerequisite is newer in history |
+| custody | `custody <id> <path>` | a change touched a path its node does not own |
 
-`<deccy-core skill base directory>` is the installed deccy-core skill directory:
-`~/.config/opencode/skills/deccy-core` for OpenCode, `~/.claude/skills/deccy-core` for Claude
-Code, `~/.agents/skills/deccy-core` for Codex, `~/.pi/agent/skills/deccy-core` for Pi, or
-`<project>/.claude/skills/deccy-core` / `<project>/.opencode/skills/deccy-core` /
-`<project>/.agents/skills/deccy-core` / `<project>/.pi/skills/deccy-core` when linked
-per-project.
+It prints one line per finding and **exits 0 even with findings**; a nonzero exit is a CLI refusal
+or an operational failure, not a graph result. Empty output is the only clean result. Run it from
+the repository root with **no draft open** (`deccy drafts` shows no `open` row): a snapshotted draft
+that edits `nodes/<id>.json` is a node candidate without a document of its own and is reported as
+`validity <draft-change> missing node document`.
 
-Run the custody script **only when no draft is open** (`deccy drafts` shows no `open` row): a draft
-by design edits files outside the target's eventual ownership.
-
-Both are diagnostics: they read `jj` history and report. The dependency story the graph records
-lives in its edges, and `deccy new --on` positions new nodes correctly by construction. If
-`check-topology.py` reports an inversion, fix it with `jj rebase -r <dependent> -A <prereq>` and
-re-run the checker.
+For a `topology <dependent> <prerequisite>` line, restack that pair with `jj rebase -r <dependent>
+-A <prerequisite>` and re-run validate. Change ids survive the move, so node filenames and edges
+are untouched. A `custody` line is not repaired by re-recording the path: move the edit to the node
+that owns it, or stop.
 
 ## Recover
 

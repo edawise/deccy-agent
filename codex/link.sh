@@ -53,7 +53,7 @@ SETTINGS_HOOK="$HERE/hooks/settings-hook.py"
 
 settings_hook() {
   if ! command -v python3 >/dev/null 2>&1; then
-    echo "python3 is required for the deccy guard hook (and the deccy check scripts)" >&2
+    echo "python3 is required for the deccy guard hook" >&2
     exit 1
   fi
   python3 "$SETTINGS_HOOK" "$@"

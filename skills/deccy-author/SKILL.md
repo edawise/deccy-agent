@@ -78,6 +78,8 @@ for running; the gate path must be present, expected in the diff, and never edit
   `abandon`, `op`, `split` or `metaedit`; the one exception is `jj workspace update-stale` to
   refresh your own workspace, and the orchestrator's gate-path restore. `cd` into the workspace,
   edit, run tests.
+- **No `deccy validate`.** The orchestrator runs it from the trunk with no draft open; from a
+  draft it reports the draft change itself as a validity finding. Report your evidence instead.
 - **No trunk edits.** Your edit/write authority is the workspace; use absolute paths under it.
   Never edit the repository working copy directly.
 - **No custody violations.** If a path belongs to another node’s `ref`, another `nodes/<id>.json`,

@@ -78,33 +78,33 @@ dependent (`evaluates` targets count as prerequisites for ordering — a check f
 checks):
 
 ```sh
-CORE="<deccy-core skill base directory>"
-python3 "$CORE/scripts/check-topology.py" [repo-root]  # every prerequisite precedes its dependent (read-only)
+cd <repo-root>
+deccy validate                # topology <dependent> <prerequisite> lines; empty output is clean
 # or, by hand (newest first; every id named in depends_on/evaluates must appear below its user):
 jj log -r '::@' --no-graph -T 'change_id.shortest(8) ++ "\n"'
 ```
 
-`<deccy-core skill base directory>` is the installed deccy-core skill directory:
-`~/.config/opencode/skills/deccy-core` for OpenCode, `~/.claude/skills/deccy-core` for Claude
-Code, `~/.agents/skills/deccy-core` for Codex, `~/.pi/agent/skills/deccy-core` for Pi, or
-`<project>/.claude/skills/deccy-core` / `<project>/.opencode/skills/deccy-core` /
-`<project>/.agents/skills/deccy-core` / `<project>/.pi/skills/deccy-core` when linked
-per-project.
+Run it with no draft open: `deccy validate` reports a snapshotted draft that edits
+`nodes/<id>.json` as a validity finding, because the draft change is not a node of its own.
 
-A report naming a prerequisite newer than its dependent is fixed by moving that prerequisite
-**below** its dependents — and the cheapest fix is not to need one:
+A `topology <dependent> <prerequisite>` line is fixed by moving the dependent after its
+prerequisite — and the cheapest fix is not to need one:
 
 - **Place by construction.** `deccy new` positions the new node after the *newest* id in its `--on`
   set. So when the new node is one that nodes already in the graph will have to depend on, name a
   dependency that sits below those dependents: the node then lands below them too and no rebase is
   needed. (Worked case: a rule that a node near the top of the stack must depend on — naming a
   dependency far below it lands the rule just below that dependency and below every dependent.)
-- **Otherwise move the one node**, with the checker as the judge:
+- **Otherwise move the one node**, with `deccy validate` as the oracle:
 
 ```sh
-jj rebase -r <prereq> -A <the change it should follow>   # moves that node
-python3 "$CORE/scripts/check-topology.py" [repo-root]    # the oracle
+jj rebase -r <dependent> -A <prerequisite>            # the round's restack
+deccy validate                                        # the oracle; empty output is clean
 ```
+
+When the dependent has dependants of its own, moving the prerequisite earlier instead can be
+cheaper: `jj rebase -r <prereq> -A <the change it should follow>` puts the prerequisite just after
+its own prerequisite, below every dependent.
 
 Do **not** use `jj rebase -s <prereq> -B <dependent>`. In a linear stack `-s` takes the
 prerequisite's whole subtree — every change newer than it — and drags it along, reordering those
@@ -112,7 +112,7 @@ changes against the dependent and inverting edges you were not looking at. A rev
 (`jj rebase -r '<a>::<b>' -A <dest>`) is no better: when the block already sits above the
 destination, it is a no-op.
 
-Re-check after any move. Change ids survive it, so node filenames and edges are untouched.
+Re-run `deccy validate` after any move. Change ids survive it, so node filenames and edges are untouched.
 
 ## Elaboration, worked
 

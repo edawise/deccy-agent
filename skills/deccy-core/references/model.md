@@ -91,17 +91,17 @@ The target model — enforce it even when the current graph falls short:
 ```sh
 deccy log                    # every node: <id> <kind> <summary>
 deccy show <id>...           # a node's stored document as pretty JSON
-deccy validate               # validity, edge resolution, I4 coverage; silent when clean
+deccy validate               # validity, resolution, coverage, topology, custody; silent when clean
 deccy drafts                 # draft work state: handle, state, workspace
 ```
 
-In deccy-cli v0.2.2 `deccy validate` checks the embedded schema, resolves every edge, and checks
-I4 coverage. It does not check topological order or content custody; the two read-only scripts in the deccy-core skill
-directory's `scripts/` do that. That directory is `~/.config/opencode/skills/deccy-core` for
-OpenCode, `~/.claude/skills/deccy-core` for Claude Code, `~/.agents/skills/deccy-core` for Codex,
-`~/.pi/agent/skills/deccy-core` for Pi, or `<project>/.claude/skills/deccy-core` /
-`<project>/.opencode/skills/deccy-core` / `<project>/.agents/skills/deccy-core` /
-`<project>/.pi/skills/deccy-core` when linked per-project.
+In deccy-cli v0.2.3 `deccy validate` checks the embedded schema, resolves every edge, checks I4
+coverage, requires every prerequisite to precede its dependent, and checks content custody: every
+path a change touched must be inside its own node's owning set (the node file plus the paths its
+`content.ref` lists). It prints one `<check> <id> <reason>` line per finding and **exits 0 even
+with findings**; empty output is the clean result. Run it from the repository root with no draft
+open — a snapshotted draft that edits `nodes/<id>.json` is seen as a node candidate without its own
+document.
 
 ## Drafts are not nodes
 

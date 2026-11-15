@@ -15,8 +15,9 @@ It defines the graph; your role skill defines your authority and procedure.
 
 - `references/model.md` — kinds, content, edges, ids, invariants I1–I6.
 - `references/placement.md` — which node a change belongs in.
-- `references/cli.md` — the deccy CLI workflows for **deccy-cli v0.2.2**: `new --evaluates`, the
-  `draft` / `drafts` / `discard` verbs, and the `record --from` landing form. In a round, only the
+- `references/cli.md` — the deccy CLI workflows for **deccy-cli v0.2.3**: `new --evaluates`, the
+  `draft` / `drafts` / `discard` verbs, the `record --from` landing form, and the five-check
+  `validate`. In a round, only the
   orchestrator runs graph-mutating verbs (`new`, `record`, `remove`, `undo`, `redo`); it also opens
   and ends drafts. Drafters and gate authors edit files in their own draft workspace; the judge is
   read-only on the graph and may open/discard its own clean-room drafts.
@@ -26,8 +27,9 @@ It defines the graph; your role skill defines your authority and procedure.
 1. The node directory is `nodes/`, one `<change-id>.json` per node.
 2. The root id is `zzzzzzzz`.
 3. The schema is embedded in the `deccy` binary; `deccy validate` checks it.
-4. Confirm `deccy` is on PATH and is **0.2.2 or newer** (`deccy --version`): `new --evaluates`,
-   `draft`, `drafts`, `discard` and `record --from` are v0.2.2 features.
+4. Confirm `deccy` is on PATH and is **0.2.3 or newer** (`deccy --version`): `new --evaluates`,
+   `draft`, `drafts`, `discard` and `record --from` are v0.2.2 features; v0.2.3 makes `validate`
+   check topology and content custody as well.
 5. Read the graph with `deccy log` and `deccy show <id>`, and the draft registry with
    `deccy drafts`.
 6. If the project lacks this layout, say so explicitly; do not silently impose it.
@@ -45,24 +47,30 @@ It defines the graph; your role skill defines your authority and procedure.
 
 ## Check before finishing
 
+This check belongs to the orchestrator, or to any role at the trunk with no draft open
+(`deccy drafts` shows no `open` row). If you are editing a draft, do not run it: hand your evidence
+to the orchestrator. From the repository root:
+
 ```sh
-CORE="<deccy-core skill base directory>"
+cd <repo-root>
 deccy validate
-python3 "$CORE/scripts/check-topology.py" [repo-root]
-python3 "$CORE/scripts/check-ref-custody.py" [repo-root]
 ```
 
-`<deccy-core skill base directory>` is the installed deccy-core skill directory:
-`~/.config/opencode/skills/deccy-core` for OpenCode, `~/.claude/skills/deccy-core` for Claude
-Code, `~/.agents/skills/deccy-core` for Codex, `~/.pi/agent/skills/deccy-core` for Pi, or
-`<project>/.claude/skills/deccy-core` / `<project>/.opencode/skills/deccy-core` /
-`<project>/.agents/skills/deccy-core` / `<project>/.pi/skills/deccy-core` when linked
-per-project.
+It prints one `<check> <id> <reason>` line per finding and **exits 0 even when it finds
+something**; a nonzero exit is a CLI refusal or operational failure, not a graph finding. Empty
+output is the only clean result. The five checks are validity, resolution, I4 coverage, topology
+and content custody.
 
-In v0.2.2 `validate` covers schema validity, edge resolution and I4 coverage (not topology). The
-scripts are read-only and cover topological order and custody. Run the custody script **only when
-no draft is open** (`deccy drafts` shows no `open` row); a draft by design edits files outside the
-eventual target's ownership.
+- `topology <dependent> <prerequisite>` — the prerequisite is newer than its dependent; restack
+  with `jj rebase -r <dependent> -A <prerequisite>` (change ids survive the move).
+- `custody <id> <path>` — the change touched a path its own node does not own (I6); move the edit
+  to the owning node, or stop.
+- `validity`, `resolution`, `coverage` — fix the node or edge; a coverage line means an I4 gate is
+  missing.
+
+Do **not** run it inside a draft workspace or while any draft is open: a snapshotted draft that
+edits `nodes/<id>.json` is a node candidate without a document of its own, so it is reported as
+`validity <draft-change> missing node document`.
 
 ## Placement in one paragraph
 
@@ -78,7 +86,7 @@ is a split, not a judgement call. Full procedure: `references/placement.md`.
 | Need | Command | Who |
 |---|---|---|
 | Read | `deccy log`, `deccy show <id>` | everyone |
-| Check | `deccy validate` | everyone |
+| Check | `deccy validate` | orchestrator, from the trunk with no draft open |
 | New decision | `deccy new -m "<summary>" --on <id> --on <id>` | orchestrator only |
 | New evaluation | `deccy new -m "<summary>" --on <standard> --evaluates <subject>` | orchestrator only |
 | Place edits | `deccy record <path>... --to <id>` | orchestrator only |

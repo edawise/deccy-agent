@@ -8,10 +8,10 @@ and limitations.
 
 - **Codex CLI 0.167.0 or newer.** The bundle is tested at `0.167.0`; `codex/install.sh` refuses an
   older release. See [Upgrading Codex](#upgrading-codex) before moving to a newer one.
-- `python3` for the guard hook, the `hooks.json` helper and the deccy check scripts.
-- `deccy` **0.2.2 or newer** for graph writes and the draft lifecycle (`deccy draft`,
-  `deccy drafts`, `deccy discard`, `deccy record --from`), and `jj` for refresh, restack and
-  verified cleanup. Both are checked when a role starts and produce a warning if missing.
+- `python3` for the guard hook and the `hooks.json` helper.
+- `deccy` **0.2.3 or newer** for graph writes and the draft lifecycle (`deccy draft`,
+  `deccy drafts`, `deccy discard`, `deccy record --from`), and for `deccy validate`'s topology and
+  custody checks. `jj` is used for refresh, restack and verified cleanup. Both are checked when a role starts and produce a warning if missing.
 - `git` for the installer's clone; an existing `--from` checkout does not need it.
 
 ## Paths & verify

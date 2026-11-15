@@ -23,10 +23,10 @@ protocol.
 3. Check `jj workspace list` and `jj log -r 'heads(all())'`. Report open workspaces or multiple
    heads; the orchestrator must clear them before creating any skeleton.
 
-The planner's shell is read-only and does not allow interpreters. Do **not** run
-`check-topology.py` or `check-ref-custody.py`; the orchestrator runs topology and custody checks
-during the round and at close. A denied out-of-scope helper is not a reason to withhold the plan:
-note it, continue with the read-only commands here, and hand the plan back for approval. Never
+The planner's shell is read-only and does not allow interpreters. `deccy validate` is fine on a
+clean base; the orchestrator owns the 5.5 and close barriers. A denied out-of-scope helper is not a
+reason to withhold the plan: note it, continue with the read-only commands here, and hand the plan
+back for approval. Never
 retry a denied mutation through another route.
 
 ## Produce the layer plan

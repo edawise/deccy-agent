@@ -12,7 +12,7 @@ The bundle:
 - author and freeze a gate before implementation;
 - judge every candidate clean-room;
 - let the user choose alternatives;
-- use **deccy-cli v0.2.2**'s `deccy draft` / `deccy drafts` / `deccy discard` for isolated draft
+- use **deccy-cli v0.2.3**'s `deccy draft` / `deccy drafts` / `deccy discard` for isolated draft
   workspaces and `deccy record --from` for landing, with `deccy new --evaluates` for gate skeletons;
 - keep raw `jj` for refresh, restack, workspace listing/forgetting and verified cleanup.
 
@@ -66,7 +66,7 @@ layer plan / user approval
        implementation drafts (parallel / alternatives)
        judge clean-room (base red, candidate green)
        user chooses -> land -> refresh every other open draft
-  -> validate + topology + custody
+  -> deccy validate (silent)
 ```
 
 A **layer** is the set of nodes the planner proposes for the next frontier. It is one table, one row
@@ -104,7 +104,7 @@ edge. The new prerequisite must already precede the target in history; a refine 
 inversion (the skeleton restack is for gate placement, not a refine edge). If the change needs a
 different commitment or a new node, it is a `new` unit, not a refine.
 
-## Draft protocol (deccy-cli v0.2.2)
+## Draft protocol (deccy-cli v0.2.3)
 
 Drafts use the CLI's own lifecycle. The orchestrator opens one from the trunk:
 
@@ -139,7 +139,6 @@ Landing is one CLI call:
 ```sh
 cd <repo-root>
 deccy record --from "$HANDLE" --to <target>
-deccy validate
 jj workspace forget "draft-$HANDLE"
 ```
 
@@ -295,11 +294,12 @@ nodes).
   record --from` lands a new `ref` with the node JSON in one call. A refine may add the `depends_on`
   edge the plan names, with a gate that covers it; a refine that needs a different decision or a new
   node is a `new` unit.
-- **Gate placement.** `deccy new --evaluates` births the evaluation before its subject, so the
-  checker reports an inversion until the round restacks the evaluation after the decision. The gate
-  is authored and frozen in that birth order, then the restack runs before implementation; an
-  implementation draft restores the frozen gate paths for running. The checker, not a hand-rolled
-  order, is the oracle, and the judge's clean-room run is the acceptance evidence.
+- **Gate placement.** `deccy new --evaluates` births the evaluation before its subject, so
+  `deccy validate` reports a `topology` line until the round restacks the evaluation after the
+  decision. The gate is authored and frozen in that birth order, then the restack runs before
+  implementation; an implementation draft restores the frozen gate paths for running. `deccy
+  validate`, not a hand-rolled order, is the oracle, and the judge's clean-room run is the
+  acceptance evidence.
 - **Linear skeleton stack.** `deccy new` always positions after the unique head of its `--on` set,
   so one skeleton pass produces one linear stack. Every gate or implementation landing rebases
   everything above it; every open draft must be refreshed with `jj workspace update-stale` and its
@@ -322,8 +322,11 @@ nodes).
   candidate passing, an ungrounded check) as `gate-weak`; it does not veto the candidate. The user
   decides whether to accept the weak gate or ask the gate author to amend it. Gate **integrity**
   failures (hash, gate edits, substituted command) still block.
-- **Custody check.** Run `check-ref-custody.py` only when `deccy drafts` shows no `open` row; a
-  draft intentionally edits files outside its target's ownership until landing.
+- **Validate.** Run `deccy validate` only from the trunk with no draft open: at the layer-wide
+  gate barrier and at close. It checks validity, resolution, I4 coverage, topology and custody,
+  prints findings and **exits 0**, so read the output; empty output is clean. A snapshotted draft
+  that edits `nodes/<id>.json` is reported as a validity finding, so never validate from inside a
+  draft.
 - **Empty heads after forget.** `jj workspace forget` can leave an empty head (observed in a past
   round). The orchestrator now runs the verified `abandon-empty-heads.sh` at close; a
   remaining non-empty or bookmarked head still stops the round for a human decision.

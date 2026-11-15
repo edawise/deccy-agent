@@ -102,6 +102,8 @@ Full conventions: `references/evaluation-conventions.md`. Form selection:
   orchestrator opened your draft and lands or discards it. Never hand-edit `.deccy/work/*.json`.
 - **No jj surgery.** No `jj new` inside the draft, no `squash`, `rebase`, `describe`, `restore`,
   `abandon`, `op`, `split`, `metaedit`, `workspace add` or `workspace forget`.
+- **No `deccy validate`.** The orchestrator runs it from the trunk with no draft open; from a
+  draft it reports the draft change itself as a validity finding. Report your evidence instead.
 - **No peeking at implementation drafts.** You gate the decision; you do not tune the gate to a
   candidate. If the drafter’s code fails, that is the gate working.
 - **No verdicts in the node (I5).** Red/green evidence is session evidence, not graph state.

@@ -209,8 +209,9 @@ carries the layer-plan template and the protocol.
 ## Session startup
 
 1. Load `deccy-core`, then `deccy-round`.
-2. Confirm `deccy --version` is **0.2.2 or newer**: `new --evaluates`, `draft`, `drafts`,
-   `discard` and `record --from` are v0.2.2 features. A lower version stops the round.
+2. Confirm `deccy --version` is **0.2.3 or newer**: 0.2.2 adds `new --evaluates`, `draft`,
+   `drafts`, `discard` and `record --from`; 0.2.3 makes `validate` check topology and custody. A
+   lower version stops the round.
 3. Read the project: `deccy log`, `deccy show <id>` for the seeds and the nodes they name,
    `deccy validate`, and `deccy drafts`. Read-only jj (`jj log`, `jj st`, `jj diff`) is fine; no
    workspace, draft or graph mutation.

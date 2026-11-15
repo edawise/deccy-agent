@@ -99,8 +99,9 @@ Permission syntax notes:
 | `shell` deny/allow patterns | guard evaluates the same patterns in order (last match wins) |
 | `question` (planner) | `AskUserQuestion` in the planner's `tools:` (interactive sessions) |
 
-The role prompts require **deccy-cli 0.2.2 or newer** for `new --evaluates`, `draft`, `drafts`,
-`discard` and `record --from`. The guard allows the draft verbs per role: the orchestrator opens,
+The role prompts require **deccy-cli 0.2.3 or newer** for `new --evaluates`, `draft`, `drafts`,
+`discard` and `record --from`, and for a `validate` that checks topology and custody as well as
+validity, resolution and coverage. The guard allows the draft verbs per role: the orchestrator opens,
 lands and discards round drafts; the judge may open and discard its own clean-room drafts; the gate
 author and drafter may not run them.
 

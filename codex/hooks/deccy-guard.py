@@ -65,7 +65,7 @@ def agent_root() -> str:
 
 
 def draft_root() -> str:
-    # deccy-cli v0.2.2 places every `deccy draft` workspace under this fixed per-user root,
+    # deccy-cli v0.2.3 places every `deccy draft` workspace under this fixed per-user root,
     # outside the repository and outside the agent bundle root.
     return os.path.expanduser(
         os.environ.get("DECCY_DRAFT_ROOT") or "~/.local/share/deccy/workspaces")

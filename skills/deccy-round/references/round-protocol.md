@@ -3,10 +3,12 @@
 This is the executable version of the round. Run it from the repository root. The orchestrator is
 the only agent that mutates the graph; everyone else edits files in a draft workspace and reports.
 
-The draft lifecycle is **deccy-cli v0.2.2**: the orchestrator opens drafts with `deccy draft`, lands
+The draft lifecycle is **deccy-cli v0.2.3**: the orchestrator opens drafts with `deccy draft`, lands
 them with `deccy record --from`, and ends unlanded drafts with `deccy discard`. Raw `jj` remains only
 for refresh (`workspace update-stale`), restack (`rebase`), workspace listing/forgetting, and the
-verified cleanup scripts. Check `deccy --version` before the round; a version below 0.2.2 stops it.
+verified cleanup scripts. Check `deccy --version` before the round; a version below 0.2.3 stops it.
+v0.2.3 also makes `deccy validate` check topological order and content custody, so the separate
+scripts are gone.
 
 ## 0. Names and state
 
@@ -64,7 +66,8 @@ any time.
 
    If any draft or workspace is open and the barrier is `refuse`, stop: resume or close it first.
    `warn` reports and asks; `off` proceeds only with the user's explicit approval.
-4. Check the base: `deccy validate`; `jj status`; `jj log -r 'heads(all())'`. The round starts from
+4. Check the base: `deccy validate` (it must print nothing); `jj status`; `jj log -r
+   'heads(all())'`. The round starts from
    a clean, single-headed working copy with `@` empty.
 5. Ask the user to approve the layer plan and every fork. Gate forms are not approved here: the
    gate author derives them from the evaluation matrix, and weak gates are surfaced at judge time.
@@ -111,7 +114,7 @@ EVAL=$(deccy new -m "gate: <decision>" --on "$on1" --on "$on2" --evaluates "$DEC
 - `depends_on` is exactly the `--on` set (the standards), never the decision it evaluates;
 - `deccy new` inserts the evaluation between the prerequisites and the decision. At birth the
   evaluation is an ancestor of the decision, so a gate draft does not carry the unbuilt decision.
-  The topology checker wants the opposite order (an evaluation follows its subject), so 5.5
+  The topology check wants the opposite order (an evaluation follows its subject), so 5.5
   restacks the evaluation after the decision before implementation; an implementation draft then
   restores the frozen gate paths for running only;
 - the evaluation id must already name a node document. The decision was just created, so this is
@@ -171,9 +174,11 @@ edit the draft belongs to; it is not the landing target and must never be a node
 **Do not open a draft until every skeleton for the layer exists.** After this phase the trunk is
 not touched again except by gate and implementation landings.
 
-`deccy validate` is expected to be unhappy during this phase: placeholders and not-yet-authored
-evaluation skeletons leave coverage holes. Validate after every landing and at close, not
-immediately after the pass.
+`deccy validate` is expected to be unhappy during this phase: `--evaluates` births each evaluation
+before its subject, so every gate is a topology inversion until 5.5 restacks it. Validate at 5.5
+(all gates landed) and at close, not immediately after the pass, and **never while a draft is
+open**: a snapshotted draft that edits `nodes/<id>.json` is reported as a validity finding because
+the draft change is not a node of its own.
 
 ## 4. Partition into components
 
@@ -292,8 +297,8 @@ deccy record --from "$HANDLE" --to "$EVAL_ID"
 
 `record --from` compares the draft's content with the evaluation's content and lands only the
 changed paths of the landable set. A new `ref` path is landable in the **same** call as the node
-document; do not split the landing. Run `deccy validate` after it; a schema or resolution failure
-stops the unit.
+document; do not split the landing. A refusal is a stop. Do not run `deccy validate` here if any
+gate draft is still open; 5.5 runs it once the whole layer's gates have landed.
 
 ```sh
 jj workspace forget "draft-$HANDLE"
@@ -338,29 +343,36 @@ verdict based on an older hash is void.
 
 ### 5.5 Restack the gate chain
 
-`deccy new --evaluates` inserts the evaluation **before** its subject, but the topology checker wants
-an evaluation to follow what it evaluates. Until the chain is restacked, the checker reports every
-evaluation as an inversion. Restack it before opening any implementation draft:
+5.5 is the layer-wide barrier between gates and implementations. **Every** gate draft in **every**
+component must be landed, frozen and forgotten, and every check draft discarded, before it runs.
+No implementation draft opens until it is clean.
+
+`deccy new --evaluates` inserts the evaluation **before** its subject, but topology wants an
+evaluation to follow what it evaluates. Until the chain is restacked, `deccy validate` reports each
+gate as `topology <dependent> <prerequisite>`. Restack it before opening any implementation draft:
 
 ```sh
-python3 "$CORE/scripts/check-topology.py"
-jj rebase -r <dependent> -A <prereq>      # the command the checker prints
-python3 "$CORE/scripts/check-topology.py"
+cd <repo-root>
+deccy validate
+jj rebase -r <dependent> -A <prerequisite>   # one per topology line
+deccy validate
 ```
 
-Repeat while the checker reports an inversion. It reads nodes from the working-copy tree, so if `@`
-is below part of the chain it may report only the inversions it can see. Once it is clean, put `@`
-at the round tip and re-check with the full tree:
+`deccy validate` exits 0 even with findings, so read its output, never its status. Restack every
+`topology` line, re-run, and repeat. Any line whose check is **not** `topology` is a stop: the
+layer has a validity, resolution, coverage or custody defect. Once only topology lines remain, put
+`@` at the round tip and re-check with the full tree:
 
 ```sh
 <deccy-round-skill-dir>/scripts/set-round-tip.sh
-python3 "$CORE/scripts/check-topology.py"
+deccy validate
 ```
 
-If that reports another inversion, restack and repeat. A clean check with `@` at the tip is the gate
-for opening implementation drafts. Change ids survive the move, so node filenames and edges are
-untouched. This is the one raw-jj history move the orchestrator may make; the checker is the oracle.
-If a restack would move a landed decision's content or a frozen gate, stop and report it instead.
+If that reports another topology line, restack and repeat. `deccy validate` printing nothing, with
+`@` at the tip and no draft open, is the gate for opening implementation drafts. Change ids
+survive the move, so node filenames and edges are untouched. This is the one raw-jj history move
+the orchestrator may make. If a restack would move a landed decision's content or a frozen gate,
+stop and report it instead.
 
 ## 6. Implementation drafts: parallel, at the frozen gate
 
@@ -569,7 +581,6 @@ cd <repo-root>
 # The CLI snapshots the draft workspace itself. Pass DRAFT_PATHS as the assertion when the
 # paths are simple; the landing refuses if the set disagrees.
 deccy record --from "$HANDLE" --to "$TARGET_ID" $DRAFT_PATHS
-deccy validate
 jj workspace forget "draft-$HANDLE"
 ```
 
@@ -648,25 +659,24 @@ a node document is still refused. It refuses any other non-empty diff. It exits 
 head remains. Never run `jj abandon` directly. A nonzero exit is a stop: report the remaining head and
 ask, rather than forcing a one-line history.
 
-The `.deccy/work` records of landed drafts are retained by the CLI (v0.2.2 has no prune verb); they
+The `.deccy/work` records of landed drafts are retained by the CLI (v0.2.3 has no prune verb); they
 are work history, not graph state. Do not delete them by hand without the user's approval.
 
 ## 9. Close
 
 ```sh
-CORE="<deccy-core skill base directory>"
 cd <repo-root>
-deccy validate
 deccy drafts                  # no `open` row; every landed draft is forgotten in jj
-python3 "$CORE/scripts/check-topology.py"
-python3 "$CORE/scripts/check-ref-custody.py"
+deccy validate                # MUST print nothing; it exits 0 even with findings, so read it
 jj workspace list
 jj log -r 'heads(all())'      # exactly one head: the working copy
 # recompute every GATE_HASH from the evaluation and its ref paths
 # a mismatch is gate-integrity: stop, do not report the round as closed
 ```
 
-`check-ref-custody.py` is only meaningful when no draft is open. Report:
+`deccy validate` must be silent: any `validity`, `resolution`, `coverage`, `topology` or `custody`
+line is a stop, not a warning. It is meaningful only with no draft open, which the `deccy drafts`
+check confirms. Report:
 
 - the layer plan and the component partition that was executed;
 - the node ids created or edited, and their gates;
@@ -676,7 +686,7 @@ jj log -r 'heads(all())'      # exactly one head: the working copy
 - residual risks (the linear skeleton stack, refined gates, new refs landed with the node JSON, and
   any component that had to be serialised).
 
-The round is complete when the user approves the recorded result, not when the scripts pass.
+The round is complete when the user approves the recorded result, not when `deccy validate` is silent.
 
 ### 9.1 Delete the ledger
 
@@ -697,6 +707,9 @@ directory. A nonzero exit is a stop: report it and ask.
 | Symptom | Action |
 |---|---|
 | `deccy drafts` shows `drifted` | The jj workspace behind an open record is gone. `deccy discard <handle>` and re-open from the current node; do not edit the orphaned directory. |
+| `deccy validate` prints a non-topology line at 5.5 | Stop the layer: fix the validity, resolution, coverage or custody line before opening implementations. Do not filter it away. |
+| `deccy validate` prints anything at close | Stop; do not report the round closed. Route the line by its check and fix it. |
+| `deccy validate` reports a draft change as `validity <id> missing node document` | A draft is open (or was snapshotted). Close, land or discard it and re-run from the trunk; never validate from inside a draft. |
 | `jj workspace list` shows `stale` | `cd "$WS" && jj workspace update-stale`; re-check `jj diff`; if it conflicts with the new base, `deccy discard` the draft and re-open it from the current gate. |
 | `deccy record --from` says a draft is stale | Another draft of the same node landed or the node changed. `deccy discard` the stale handle, re-open from the current node, re-author, re-judge. Never force the landing. |
 | `deccy record --from` refuses the path set | The optional paths must equal the changed landable set exactly. Re-read `jj diff --summary -r @` and the evaluation/target `ref`; discard and re-judge if the draft changed. |

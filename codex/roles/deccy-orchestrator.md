@@ -28,15 +28,15 @@ call is a denial, not a malfunction:** stop and report it; never route around it
    spawn the `deccy-plan` child first and wait for the user to approve its plan. After the user
    approves, write the approved plan to `$DECCY_AGENT_ROOT/plan/<round>.plan.md` before the skeleton
    pass, and read it back from that file.
-3. Confirm the CLI: `deccy --version` must be **0.2.2 or newer**. That release provides
-   `new --evaluates`, `draft`, `drafts`, `discard` and `record --from`; an older `deccy` stops the
-   round before anything is created.
+3. Confirm the CLI: `deccy --version` must be **0.2.3 or newer**. 0.2.2 provides
+   `new --evaluates`, `draft`, `drafts`, `discard` and `record --from`; 0.2.3 makes `validate`
+   check topology and custody. An older `deccy` stops the round before anything is created.
 4. Check the bounds and barrier: `max_units_per_layer` (default 12, `0` unlimited),
    `max_open_drafts` (default 6, `0` unlimited) and `round_barrier` (`refuse` default). Check
    `deccy drafts`, `jj workspace list` and `jj log -r 'heads(all())'`; an `open` record, an open
    workspace or more than one head must be resumed or closed before creating skeletons. A `drifted`
    open row is a stop, not a cleanup: discard or re-open it.
-5. Run `deccy validate` and `jj status`; the base must be clean.
+5. Run `deccy validate` and `jj status`; the base must be clean (`deccy validate` prints nothing).
 
 ## Round execution
 
@@ -81,8 +81,8 @@ Follow `references/round-protocol.md` in the `deccy-round` skill directory read 
    `~/.local/share/deccy/workspaces/<repository-namespace>/<handle>`, fixed by the CLI. Gate drafts
    may be authored in parallel across components; inside a component, author them in dependency
    order. **Land** them **one at a time** with
-   `deccy record --from "$HANDLE" --to "$EVAL_ID"`, then `deccy validate`, then forget the landed
-   workspace with `jj workspace forget "draft-$HANDLE"`, refresh every other open draft with
+   `deccy record --from "$HANDLE" --to "$EVAL_ID"`, then forget the landed workspace with
+   `jj workspace forget "draft-$HANDLE"`, refresh every other open draft with
    `jj workspace update-stale`, then hash-freeze. A new gate `ref` path lands in the same
    `record --from` call as the evaluation node; do not split it. Pass the author the decision and
    standard ids and the unit's write set — not a gate form: the author derives it from the
@@ -92,11 +92,13 @@ Follow `references/round-protocol.md` in the `deccy-round` skill directory read 
    after the author reports the new test/criteria paths, open a separate check draft at the target
    (`deccy draft "$TARGET_ID" --edit "$ROUND_EDIT"`), restore those paths into it (`jj restore --from <gate-draft-change> --to @ -- <paths>`), hand it to the author
    for the red run only; it is evidence, and you `deccy discard` it afterwards. A gate-author defect stops the unit; a judge `gate-weak`
-   advisory does not. Once every gate in the component is landed and frozen, run
-   `check-topology.py` and restack every inversion with the printed
-   `jj rebase -r <dependent> -A <prereq>` before opening an implementation draft. Then run
-   `$DECCY_SKILLS/deccy-round/scripts/set-round-tip.sh` and re-check with the full tree; repeat
-   until a clean check with `@` at the tip. This is the one raw-jj history move you may make.
+   advisory does not. **5.5 barrier:** once every gate in the **layer** is landed and frozen and
+   every gate draft is forgotten (no open draft anywhere), run `deccy validate`. It exits 0 even
+   with findings, so read its lines. Each `topology <dependent> <prerequisite>` is a gate born
+   before its subject; restack that pair with `jj rebase -r <dependent> -A <prerequisite>`. Any
+   other check line is a stop. Then run `$DECCY_SKILLS/deccy-round/scripts/set-round-tip.sh` and
+   re-run `deccy validate`; repeat until it prints nothing with `@` at the tip. No implementation
+   draft opens before this barrier is clean. This is the one raw-jj history move you may make.
 5. **Implementation drafts.** For a new unit, open the draft at the decision with
    `deccy draft "$DECISION_ID" --edit "$ROUND_EDIT"` and restore the frozen gate paths for running
    (`jj restore --from "$EVAL_ID" --to @ -- <gate-paths>`), because the restack puts the evaluation
@@ -120,9 +122,10 @@ Follow `references/round-protocol.md` in the `deccy-round` skill directory read 
 
    ```sh
    deccy record --from "$HANDLE" --to "$TARGET"
-   deccy validate
    jj workspace forget "draft-$HANDLE"
    ```
+
+   A refusal is a stop; do not run `deccy validate` here while any draft is still open.
 
    `record --from` compares the draft with the target and lands only the changed paths of the
    landable set; a new `ref` path lands in the **same** call as the node JSON, so never split it.
@@ -143,13 +146,12 @@ Follow `references/round-protocol.md` in the `deccy-round` skill directory read 
    `--force-stray`; a conflicted judge copy needs `--force-superseded`. It still refuses the working
    copy, open workspaces, bookmarked or described heads, node changes, and any other non-empty diff;
    never run `jj abandon` directly. If it exits nonzero, stop.
-8. **Close.** When every component has landed or stopped, run `deccy validate`, `deccy drafts` (no
-   `open` row), topology and custody checks; confirm `jj workspace list` is `default` only,
-   `jj log -r 'heads(all())'` is exactly the working-copy head, and every gate still hashes to the
-   hash frozen before its implementation (a mismatch is a gate-integrity failure: stop). In v0.2.2
-   `deccy validate` covers validity, resolution and I4 coverage only; `check-topology.py` and
-   `check-ref-custody.py` still own topological order and custody, and custody is meaningful only
-   when `deccy drafts` has no `open` row. Report the layer, components, node ids, gates,
+8. **Close.** When every component has landed or stopped, run `deccy validate` (it must print
+   nothing; it exits 0 even with findings, so read its output) and `deccy drafts` (no `open` row).
+   Any validity, resolution, coverage, topology or custody line is a stop. Confirm
+   `jj workspace list` is `default` only, `jj log -r 'heads(all())'` is exactly the working-copy
+   head, and every gate still hashes to the hash frozen before its implementation (a mismatch is a
+   gate-integrity failure: stop). Report the layer, components, node ids, gates,
    verdicts, any `gate-weak` advisory and the user's choice on it, landed/dropped paths, deviations
    and residual risks. Ask the user to approve the result.
 9. **Delete the ledger.** After the user approves the close report, run
@@ -239,10 +241,10 @@ children have reported.
 - **Forks freeze before skeletons.** An unchosen fork's dependants are not in this layer. Do not
   create their skeletons provisionally.
 - **Records and landings are serial.** Authoring and judging may overlap; graph writes may not.
-- **Validate after every record.** Run `deccy validate` after each `deccy record` and
-  `record --from` landing (and after `deccy remove`). In v0.2.2 it checks validity, resolution and
-  I4 coverage only; topology and custody still come from the scripts. A schema or resolution failure
-  stops the unit before the next landing; do not continue landing a malformed node.
+- **Validate at the barriers, never with a draft open.** Run `deccy validate` only from the trunk
+  with no open draft: at the 5.5 barrier (all gates landed and forgotten) and at close. It prints
+  findings and exits 0, so read its output; any line is a finding. A snapshotted draft that edits
+  `nodes/<id>.json` is reported as a validity failure, so never use validate to inspect a draft.
 - **Land only through `record --from`.** `deccy record --from "$HANDLE" --to "$TARGET"` snapshots
   the draft workspace itself, checks staleness and lands the changed landable set. Never hand-roll
   the landing with `jj new <target>`, `jj restore` and `deccy record <paths>`, and never split a new
@@ -257,7 +259,7 @@ children have reported.
   `workspace forget draft-<handle>` (landed only), `status/diff/show/log`, `new <target>` and
   `set-round-tip.sh` for the round tip, `restore --from <eval> --to @ -- <gate-paths>` in a
   refine/gate check draft, `restore --from <draft> --to @ -- <draft-paths>` in a judge candidate
-  draft, `rebase -r <dependent> -A <prereq>` for a topology inversion the checker reports, and
+  draft, `rebase -r <dependent> -A <prereq>` for a topology inversion `deccy validate` reports, and
   `describe -m "<summary>" <id>` for a change summary only. Never `jj workspace add` (use
   `deccy draft`), never hand-edit `.deccy/work/*.json`, and never `jj new -A`, `squash`, `op`,
   `split`, `metaedit`, `undo`, or `jj abandon` directly. Summaries are the one `jj describe`
@@ -299,7 +301,7 @@ components: <component> <units> <state>
 units: <handle> <mode> <change id>
 gates: <eval id> <hash> <integrity> <strength> [gate-weak: <advisory>]
 drafts: <component> <handle> <mode> <target> <draft change> <verdict> landed|dropped
-checks: deccy validate <result>; topology <result>; custody <result>
+checks: deccy validate (silent)
 deviations: <...>
 residual risks: <...>
 ```

@@ -152,6 +152,8 @@ Never store the verdict in a node (I5); the verdict belongs in the round report.
   only for the base/candidate you are judging. Never hand-edit `.deccy/work/*.json`.
 - No jj graph surgery: no `new -A`, `squash`, `rebase`, `describe`, `abandon`, `op`, `split`,
   `metaedit`, `undo`, `workspace add`.
+- No `deccy validate`: the orchestrator runs it from the trunk with no draft open, and from a draft
+  it reports the draft change itself as a validity finding. Report your evidence instead.
 - No edits to the candidate workspace, the gate, or the repo working copy. You may write logs in
   your own judge draft only.
 - No accepting a draft because another alternative is worse; judge each on its own gate.

@@ -14,10 +14,12 @@ together. The layer is partitioned into **components** — weakly connected sets
 order: a frozen gate before each implementation, an adversarial judge before each landing.
 
 This skill is for the **planner** (layer plan, read-only) and the **orchestrator** (the only graph
-writer). **deccy-cli v0.2.2** provides the draft lifecycle: `deccy draft` opens an isolated
+writer). **deccy-cli v0.2.3** provides the draft lifecycle: `deccy draft` opens an isolated
 workspace and a record, `deccy record --from` lands it with a staleness check, and `deccy discard`
-ends it without landing. Gate skeletons are born with `deccy new --evaluates`. Raw `jj` is only
-for refresh, restack, workspace listing/forgetting and verified cleanup.
+ends it without landing. Gate skeletons are born with `deccy new --evaluates`. `deccy validate`
+now checks validity, resolution, I4 coverage, topology and custody; it prints findings and exits 0,
+so read its output. Raw `jj` is only for refresh, restack, workspace listing/forgetting and verified
+cleanup.
 
 ## Contract
 
@@ -79,7 +81,7 @@ layer plan / user approval
        implementation drafts (parallel / alternatives)
        judge clean-room (base red, candidate green)
        user choice -> land the chosen draft
-  -> validate + topology + custody
+  -> deccy validate (silent: validity, resolution, coverage, topology, custody)
 ```
 
 Every skeleton is created before the first draft, because `deccy new` uses `jj new -A` and would
@@ -137,11 +139,13 @@ Full commands and failure handling: `references/round-protocol.md`; jj gotchas:
    unit's gate needs its prerequisites' landed content. **Land** them one at a time with
    `deccy record --from "$HANDLE" --to "$EVAL_ID"`, then refresh every open draft and hash-freeze.
    A reused gate is verified and frozen without a draft. An amended gate, or a new evaluation, for a
-   refine follows the target-check-draft rule. After every gate in the component is landed and
-   frozen, run `check-topology.py` and restack every inversion with the printed `jj rebase -r
-   <dependent> -A <prereq>` before opening any implementation draft; then `set-round-tip.sh` and
-   re-check with the full tree. This is the one raw-jj history move. A gate-author defect stops that
-   unit; a judge `gate-weak` advisory does not.
+   refine follows the target-check-draft rule. After every gate in the **layer** is landed, frozen
+   and forgotten (and every check draft discarded), run `deccy validate` with no draft open. It
+   reports each gate as `topology <dependent> <prerequisite>`; restack every such pair with
+   `jj rebase -r <dependent> -A <prerequisite>`, then `set-round-tip.sh` and re-validate. Any line
+   whose check is not `topology` stops the layer, and no implementation draft opens until validate
+   is silent. This is the one raw-jj history move. A gate-author defect stops that unit; a judge
+   `gate-weak` advisory does not.
 5. **Implementation drafts.** For a new unit, `deccy draft "$DECISION_ID"`; for a refine,
    `deccy draft "$TARGET_ID"`. In both cases the orchestrator restores the frozen gate paths from
    `$EVAL_ID` into the draft for running only (the restack puts the evaluation after the node). Spawn one drafter per draft, up to `max_open_drafts` at a time. Within a component, only
@@ -154,13 +158,13 @@ Full commands and failure handling: `references/round-protocol.md`; jj gotchas:
    advisory. Nothing is recorded before the verdict.
 7. **Choose and land per component.** When a component's candidates are judged, ask the user to
    choose any alternative and to accept or return any weak gate. Land the chosen draft with
-   `deccy record --from "$HANDLE" --to "$TARGET"`, verify with `deccy validate`, forget its
-   workspace, **discard** the losers and rejected drafts, refresh the remaining open drafts and
+   `deccy record --from "$HANDLE" --to "$TARGET"`, forget its workspace, **discard** the losers and rejected drafts, refresh the remaining open drafts and
    re-run their gates, then abandon verified stray heads. Components land independently; a component
    does not wait for the others. If a landing changes another component's gate result, stop: the
    components were not independent.
-8. **Close.** When every component has landed or stopped, run `deccy validate`, `deccy drafts`
-   (no `open` row), topology and custody checks; confirm `jj workspace list` is `default` only,
+8. **Close.** When every component has landed or stopped, run `deccy validate` (it exits 0 even
+   with findings, so it must **print nothing**) and `deccy drafts` (no `open` row); confirm
+   `jj workspace list` is `default` only,
    `heads(all())` is exactly the working-copy head, and every gate still hashes to its frozen value. Report node ids, gates,
    verdicts, weak-gate advisories, landed/dropped paths, deviations and residual risks. The round
    is not done until the user approves the result. After approval, delete the round ledger with

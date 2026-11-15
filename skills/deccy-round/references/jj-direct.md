@@ -1,8 +1,8 @@
-# Draft workspaces (deccy-cli v0.2.2)
+# Draft workspaces (deccy-cli v0.2.3)
 
 The round uses the CLI's draft lifecycle for isolation. The CLI writes the graph, the workspace and
 the draft record; jj never writes the graph. This file records the exact surface and the traps found
-while running the round on deccy-cli 0.2.2 with jj 0.45.x.
+while running the round on deccy-cli 0.2.3 with jj 0.45.x.
 
 ## The model
 
@@ -101,7 +101,7 @@ jj workspace forget "draft-$HANDLE"
   re-open; never `jj squash` or `jj restore` around the refusal.
 - The draft workspace's `@` becomes an empty change. `deccy discard` refuses a landed record, so
   forget the workspace with `jj workspace forget "draft-$HANDLE"` and let the close-out cleanup
-  abandon the empty head. The landed record stays in `.deccy/work` (v0.2.2 has no prune verb).
+  abandon the empty head. The landed record stays in `.deccy/work` (v0.2.3 has no prune verb).
 
 ## Discarding
 
@@ -136,7 +136,7 @@ it and open a fresh draft from the current node.
 | `jj workspace list` | see open workspaces and stale state |
 | `jj workspace update-stale` | refresh a draft after a landing |
 | `jj workspace forget "draft-<handle>"` | drop a **landed** draft's workspace |
-| `jj rebase -r <dependent> -A <prereq>` (trunk only) | restack a topology inversion; the checker prints the command |
+| `jj rebase -r <dependent> -A <prereq>` (trunk only) | restack a topology inversion; `deccy validate` names the pair |
 | `jj new <target>` (trunk only) | move `@` to an empty round-tip change |
 | `jj restore --from <eval> --to @ -- <gate-paths>` (refine/judge draft) | add the frozen gate test for running; not landable |
 | `jj restore --from <draft> --to @ -- <draft-paths>` (judge candidate) | copy the candidate into a clean judge draft |
@@ -168,8 +168,8 @@ it and open a fresh draft from the current node.
 The orchestrator, and only the orchestrator, may use these:
 
 - `jj rebase -r <dependent> -A <prereq>` — restack a topology inversion reported by
-  `check-topology.py`. Use the command the checker prints, re-run the checker until clean, and never
-  use it to force a fork or touch a frozen gate; change ids survive the move.
+  `deccy validate` as `topology <dependent> <prerequisite>`. Re-run validate until it prints
+  nothing, and never use it to force a fork or touch a frozen gate; change ids survive the move.
 - `jj describe -m "<summary>" <id>` — change a landed node's summary after a landing. Summary only,
   never content or edges, and never before the content is judged and landed.
 - `scripts/set-round-tip.sh` — after the last landing, start an empty change above the node change

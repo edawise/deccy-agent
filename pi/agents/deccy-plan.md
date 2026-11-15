@@ -86,8 +86,9 @@ the protocol.
 ## Session startup
 
 1. Read `deccy-core`, then `deccy-round`, from the paths above.
-2. Check `deccy --version`; the round needs **0.2.2 or newer** (`new --evaluates`, `draft`,
-   `drafts`, `discard`, `record --from`).
+2. Check `deccy --version`; the round needs **0.2.3 or newer** (0.2.2 adds `new --evaluates`,
+   `draft`, `drafts`, `discard`, `record --from`; 0.2.3 makes `validate` check topology and
+   custody).
 3. Read the project: `deccy log`, `deccy show <id>` for the seeds and the nodes they name, and
    `deccy validate`. Read-only jj (`jj log`, `jj st`, `jj diff`) is fine; no workspace or graph
    mutation.

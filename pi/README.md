@@ -12,13 +12,13 @@ subagents.
 
 - **Pi 1.0.0 or newer.** The bundle is tested at `1.5.0`; `pi/link.sh` refuses an older release.
   See [Upgrading Pi](#upgrading-pi) before moving to a newer one.
-- `python3` for the `subagents.json` merge and the shared deccy check scripts.
+- `python3` for the `subagents.json` merge.
 - Node `23.6+` (or `22.6+` with `--experimental-strip-types`) to run the TypeScript extension tests
   directly; Pi itself bundles its own runtime.
-- `deccy` **0.2.2 or newer** for graph writes and the draft lifecycle (`deccy draft`,
-  `deccy drafts`, `deccy discard`, `deccy record --from`), and `jj` for refresh, restack and
-  verified cleanup. Both are checked when a role starts and produce a warning if missing. Check
-  `deccy --version` before a round; v0.2.2 is required.
+- `deccy` **0.2.3 or newer** for graph writes, the draft lifecycle (`deccy draft`, `deccy drafts`,
+  `deccy discard`, `deccy record --from`) and `deccy validate`'s topology and custody checks; `jj`
+  is used for refresh, restack and verified cleanup. Both are checked when a role starts and
+  produce a warning if missing.
 - `git` for the installer's clone; an existing `--from` checkout does not need it.
 
 ## Locked plugin combination
@@ -344,7 +344,7 @@ rather than replacing a package at a different version.
   procedure text is common to all four ports.
 - **Last validated combination.** Pi `1.5.0`, `@gotgenes/pi-subagents@25.0.5`,
   `@gotgenes/pi-permission-system@42.0.0`, optional
-  `@juicesharp/rpiv-ask-user-question@2.15.0`, jj `0.46.0`, deccy `0.2.2`, macOS arm64.
+  `@juicesharp/rpiv-ask-user-question@2.15.0`, jj `0.46.0`, deccy `0.2.3`, macOS arm64.
 - **Before handoff.** Run `node pi/tests/deccy-role.test.mjs` and `sh pi/tests/launcher.test.sh`,
   plus the guard probes and one-unit fixture round described under
   [Upgrading Pi](#upgrading-pi).
